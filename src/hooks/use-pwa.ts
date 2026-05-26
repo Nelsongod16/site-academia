@@ -12,7 +12,21 @@ export function usePwa() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+      void navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((registration) => {
+          void registration.unregister();
+        });
+      });
+    }
+
+    if ("caches" in window) {
+      void caches.keys().then((keys) => {
+        keys
+          .filter((key) => key.startsWith("pulse-studio-"))
+          .forEach((key) => {
+            void caches.delete(key);
+          });
+      });
     }
 
     const handlePrompt = (event: Event) => {
@@ -36,7 +50,7 @@ export function usePwa() {
   }
 
   return {
-    canInstall: Boolean(installPrompt),
+    canInstall: false,
     install,
   };
 }
