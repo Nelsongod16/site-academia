@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Clock3, MoveRight } from "lucide-react";
 import { useMemo } from "react";
-import { Area, AreaChart, Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { useStore } from "zustand";
 
 import { PageFrame } from "@/components/layout/page-frame";
@@ -75,20 +74,22 @@ export function DashboardScreen() {
     volume: (
       <Surface key="volume" className="rounded-[28px]">
         <SectionHeading eyebrow="semanal" title="Volume e tempo" />
-        <div className="mt-3 h-44 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={weekly}>
-              <defs>
-                <linearGradient id="dashArea" x1="0" y1="0" x2="0" y2="1">
-                  <stop stopColor="#9cff79" stopOpacity={0.45} />
-                  <stop offset="1" stopColor="#9cff79" stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "#91a0b8", fontSize: 11 }} />
-              <Tooltip cursor={false} contentStyle={{ background: "#0f1218", border: "1px solid rgba(255,255,255,0.08)" }} />
-              <Area type="monotone" dataKey="total" stroke="#9cff79" fill="url(#dashArea)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
+        <div className="mt-4 space-y-3">
+          {weekly.map((item) => {
+            const width = Math.max((item.total / Math.max(...weekly.map((week) => week.total), 1)) * 100, item.total > 0 ? 14 : 6);
+
+            return (
+              <div key={item.label}>
+                <div className="mb-1 flex items-center justify-between text-xs text-[var(--muted)]">
+                  <span>{item.label}</span>
+                  <span>{formatDuration(item.total)}</span>
+                </div>
+                <div className="h-2 rounded-full bg-white/6">
+                  <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${width}%` }} />
+                </div>
+              </div>
+            );
+          })}
         </div>
         <p className="mt-2 text-xs text-[var(--muted)]">Tempo total salvo automaticamente. {formatDuration(totalTrainingTime)} acumulados.</p>
       </Surface>
@@ -112,14 +113,23 @@ export function DashboardScreen() {
     compare: (
       <Surface key="compare" className="rounded-[28px]">
         <SectionHeading eyebrow="comparativo" title="Ultimas semanas" />
-        <div className="mt-4 h-40">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={weekly}>
-              <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "#91a0b8", fontSize: 11 }} />
-              <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} contentStyle={{ background: "#0f1218", border: "1px solid rgba(255,255,255,0.08)" }} />
-              <Bar dataKey="total" fill="#4fd1ff" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {weekly.map((item, index) => {
+            const previous = weekly[index - 1]?.total ?? item.total;
+            const delta = item.total - previous;
+
+            return (
+              <div key={item.label} className="rounded-[18px] border border-white/6 bg-white/4 px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium">{item.label}</p>
+                  <p className="text-xs text-[var(--muted)]">{formatDuration(item.total)}</p>
+                </div>
+                <p className="mt-2 text-xs text-[var(--muted)]">
+                  {delta > 0 ? `+${formatDuration(delta)}` : delta < 0 ? `-${formatDuration(Math.abs(delta))}` : "sem mudanca"}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </Surface>
     ),
