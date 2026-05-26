@@ -1,6 +1,6 @@
-const CACHE_NAME = "pulse-studio-v1";
+const CACHE_NAME = "pulse-studio-v2";
 const OFFLINE_URL = "/offline";
-const CORE_ASSETS = ["/", "/dashboard", "/feed", "/training", "/exercises", "/manifest.webmanifest", OFFLINE_URL];
+const CORE_ASSETS = ["/", "/register", "/manifest.webmanifest", OFFLINE_URL];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

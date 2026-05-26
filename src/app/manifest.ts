@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Pulse Studio",
     short_name: "Pulse",
     description: "App minimalista para rotina de treino, corrida, natacao e evolucao fisica.",
-    start_url: "/dashboard",
+    start_url: "/",
     display: "standalone",
     background_color: "#06070a",
     theme_color: "#06070a",
