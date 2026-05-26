@@ -2,10 +2,11 @@
   "name": "pulse-studio",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev --hostname 0.0.0.0 --turbopack",
     "build": "next build",
-    "start": "next start",
-    "lint": "eslint ."
+    "start": "next start --hostname 0.0.0.0",
+    "lint": "eslint .",
+    "publish:master": "powershell -ExecutionPolicy Bypass -File ./scripts/publish-master.ps1"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
