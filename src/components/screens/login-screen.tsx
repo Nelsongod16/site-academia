@@ -13,6 +13,7 @@ import { useAppStore } from "@/store/app-store";
 
 export function LoginScreen() {
   const router = useRouter();
+  const hasHydrated = useStore(useAppStore, (state) => state.hasHydrated);
   const sessionUser = useStore(useAppStore, (state) => state.sessionUser);
   const signInDemo = useStore(useAppStore, (state) => state.signInDemo);
   const signInFirebaseUser = useStore(useAppStore, (state) => state.signInFirebaseUser);
@@ -21,13 +22,13 @@ export function LoginScreen() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (sessionUser) {
-      window.location.replace("/settings");
+    if (hasHydrated && sessionUser) {
+      router.replace("/settings");
     }
-  }, [sessionUser]);
+  }, [hasHydrated, router, sessionUser]);
 
   function enterApp() {
-    window.location.assign("/settings");
+    router.push("/settings");
   }
 
   async function handleFirebaseLogin() {

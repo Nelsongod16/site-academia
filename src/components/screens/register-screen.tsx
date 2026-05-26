@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Button, Input, StrongSurface } from "@/components/ui/kit";
 import { registerWithFirebase } from "@/lib/firebase/auth";
@@ -9,6 +10,7 @@ import { hasFirebaseConfig } from "@/lib/firebase/client";
 import { useAppStore } from "@/store/app-store";
 
 export function RegisterScreen() {
+  const router = useRouter();
   const signInDemo = useAppStore((state) => state.signInDemo);
   const signInFirebaseUser = useAppStore((state) => state.signInFirebaseUser);
   const [email, setEmail] = useState("");
@@ -16,7 +18,7 @@ export function RegisterScreen() {
   const [error, setError] = useState("");
 
   function enterApp() {
-    window.location.assign("/settings");
+    router.push("/settings");
   }
 
   async function handleRegister() {

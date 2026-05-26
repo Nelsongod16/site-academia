@@ -10,6 +10,7 @@ import type { SessionUser, SharedSnapshot, WorkoutExercise } from "@/types/app";
 type ConnectionHint = "online" | "offline" | "syncing" | "saved";
 
 interface AppState extends SharedSnapshot {
+  hasHydrated: boolean;
   sessionUser: SessionUser | null;
   syncMode: "local" | "firebase-ready" | "firebase-live";
   dashboardOrder: string[];
@@ -17,6 +18,7 @@ interface AppState extends SharedSnapshot {
   commentsByPost: Record<string, { id: string; author: string; text: string; createdAt: string }[]>;
   scrollMemory: Record<string, number>;
   connectionHint: ConnectionHint;
+  setHasHydrated: (value: boolean) => void;
   setConnectionHint: (value: ConnectionHint) => void;
   setSyncMode: (value: AppState["syncMode"]) => void;
   signInDemo: (userId?: string) => void;
@@ -61,12 +63,14 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       ...baseSnapshot(),
+      hasHydrated: false,
       sessionUser: null,
       syncMode: "local",
       dashboardOrder,
       quickWorkoutId: "wed",
       scrollMemory: {},
       connectionHint: "saved",
+      setHasHydrated: (value) => set({ hasHydrated: value }),
       setConnectionHint: (value) => set({ connectionHint: value }),
       setSyncMode: (value) => set({ syncMode: value }),
       signInDemo: (userId = "user-1") =>
@@ -261,6 +265,9 @@ export const useAppStore = create<AppState>()(
     {
       name: "pulse-studio-store",
       storage: createJSONStorage(() => localStorage),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
       partialize: (state) => ({
         feedPosts: state.feedPosts,
         commentsByPost: state.commentsByPost,
