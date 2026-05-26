@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { closestCenter, DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Sparkles, StretchHorizontal, Copy, CheckCircle2 } from "lucide-react";
+import { ArrowRight, CheckCircle2, Copy, Plus, Sparkles, StretchHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useStore } from "zustand";
 
@@ -35,14 +36,14 @@ function SortableExercise({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className="rounded-[22px] border border-white/8 bg-white/4 p-4"
+      className="rounded-[22px] bg-white/4 p-4"
     >
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{name}</p>
           <p className="mt-1 text-xs text-[var(--muted)]">Ultima carga salva visivel no card.</p>
         </div>
-        <button className="rounded-full border border-white/8 bg-white/4 p-2 text-[var(--muted)]" {...attributes} {...listeners}>
+        <button className="rounded-full bg-white/8 p-2 text-[var(--muted)]" {...attributes} {...listeners}>
           <StretchHorizontal className="size-4" />
         </button>
       </div>
@@ -65,12 +66,17 @@ export function TrainingScreen() {
   const addWorkoutNote = useStore(useAppStore, (state) => state.addWorkoutNote);
   const duplicateWorkout = useStore(useAppStore, (state) => state.duplicateWorkout);
   const duplicateLastWeek = useStore(useAppStore, (state) => state.duplicateLastWeek);
+  const addCustomWorkout = useStore(useAppStore, (state) => state.addCustomWorkout);
   const reorderWorkoutExercises = useStore(useAppStore, (state) => state.reorderWorkoutExercises);
   const updateWorkoutExercise = useStore(useAppStore, (state) => state.updateWorkoutExercise);
   const addExercisesToWorkout = useStore(useAppStore, (state) => state.addExercisesToWorkout);
   const quickWorkoutId = useStore(useAppStore, (state) => state.quickWorkoutId);
   const setQuickWorkout = useStore(useAppStore, (state) => state.setQuickWorkout);
   const [selectedId, setSelectedId] = useState(quickWorkoutId ?? workouts[0]?.id);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDuration, setNewDuration] = useState("60");
+  const [newKind, setNewKind] = useState<"gym" | "run" | "swim">("gym");
+  const [newGroups, setNewGroups] = useState("peito, ombro, triceps");
 
   const sensors = useSensors(useSensor(PointerSensor));
   const selectedWorkout = workouts.find((workout) => workout.id === selectedId) ?? workouts[0];
@@ -82,10 +88,72 @@ export function TrainingScreen() {
     return Math.round((done / Math.max(workouts.length, 1)) * 100);
   }, [workouts]);
 
+  function handleCreateWorkout() {
+    const title = newTitle.trim();
+    if (!title) {
+      return;
+    }
+
+    const muscleGroups = newGroups
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    addCustomWorkout({
+      title,
+      kind: newKind,
+      durationMinutes: Number(newDuration) || 45,
+      muscleGroups: muscleGroups.length ? muscleGroups : ["cardio"],
+    });
+
+    setNewTitle("");
+    setNewDuration("60");
+  }
+
   return (
     <PageFrame>
       <StrongSurface className="rounded-[30px]">
-        <SectionHeading eyebrow="treino semanal" title="Semana organizada" />
+        <SectionHeading eyebrow="treino semanal" title="Semana organizada" action={<Link href="/exercises" className="text-sm text-[var(--accent)]">abrir biblioteca</Link>} />
+        <div className="mt-5 grid gap-3 md:grid-cols-[1.3fr_0.7fr]">
+          <div className="rounded-[24px] bg-white/5 p-4">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">novo treino</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <Input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder="Ex: Upper focado em peito" />
+              <Input value={newDuration} onChange={(event) => setNewDuration(event.target.value)} placeholder="Duracao em minutos" />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(["gym", "run", "swim"] as const).map((kind) => (
+                <Chip key={kind} active={newKind === kind} onClick={() => setNewKind(kind)}>
+                  {kind}
+                </Chip>
+              ))}
+            </div>
+            <Input className="mt-2" value={newGroups} onChange={(event) => setNewGroups(event.target.value)} placeholder="Musculos: peito, costas, cardio" />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button onClick={handleCreateWorkout} className="gap-2">
+                <Plus className="size-4" />
+                Adicionar treino
+              </Button>
+              <Link href="/dashboard" className="inline-flex min-h-11 items-center rounded-[16px] bg-white/8 px-4 text-sm text-white">
+                voltar ao inicio
+              </Link>
+            </div>
+          </div>
+          <div className="rounded-[24px] bg-white/5 p-4">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">atalhos</p>
+            <div className="mt-3 space-y-2">
+              <Link href="/feed" className="flex items-center justify-between rounded-[18px] bg-white/6 px-4 py-3">
+                <span className="text-sm">Compartilhar treino no feed</span>
+                <ArrowRight className="size-4 text-[var(--accent)]" />
+              </Link>
+              <Link href="/exercises" className="flex items-center justify-between rounded-[18px] bg-white/6 px-4 py-3">
+                <span className="text-sm">Adicionar exercicios com video</span>
+                <ArrowRight className="size-4 text-[var(--accent)]" />
+              </Link>
+            </div>
+          </div>
+        </div>
+
         <div className="mt-4 overflow-x-auto">
           <div className="flex min-w-max gap-3">
             {workouts.map((workout) => (
@@ -95,8 +163,8 @@ export function TrainingScreen() {
                   setSelectedId(workout.id);
                   setQuickWorkout(workout.id);
                 }}
-                className={`min-w-[168px] rounded-[22px] border p-4 text-left transition ${
-                  workout.id === selectedWorkout.id ? "border-white/30 bg-white/10" : "border-white/8 bg-white/4"
+                className={`min-w-[168px] rounded-[22px] p-4 text-left transition ${
+                  workout.id === selectedWorkout.id ? "bg-white/12" : "bg-white/5"
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -112,7 +180,7 @@ export function TrainingScreen() {
             ))}
           </div>
         </div>
-        <div className="mt-4 rounded-[18px] border border-white/8 bg-white/4 p-3">
+        <div className="mt-4 rounded-[18px] bg-white/5 p-3">
           <p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">progresso semanal</p>
           <div className="mt-2 h-2 rounded-full bg-white/6">
             <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${progress}%` }} />
@@ -224,9 +292,9 @@ export function TrainingScreen() {
         </Surface>
       </div>
 
-      <Surface className="flex items-center gap-3 rounded-[22px]">
+      <Surface className="flex items-center gap-3 rounded-[22px] bg-white/5">
         <Sparkles className="size-4 text-[var(--accent)]" />
-        <p className="text-sm text-[var(--muted)]">Swipe horizontal entre dias, drag and drop nos exercicios e feedback visual ao salvar.</p>
+        <p className="text-sm text-[var(--muted)]">Treinos separados por secao, com criacao rapida, biblioteca de exercicios e fluxo social conectado.</p>
       </Surface>
     </PageFrame>
   );

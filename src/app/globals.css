@@ -3,8 +3,8 @@
 :root {
   --bg: #06070a;
   --bg-soft: #0e1117;
-  --surface: rgba(18, 22, 31, 0.86);
-  --surface-strong: rgba(23, 28, 40, 0.94);
+  --surface: rgba(21, 25, 34, 0.92);
+  --surface-strong: rgba(15, 18, 25, 0.98);
   --surface-faint: rgba(255, 255, 255, 0.04);
   --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.16);
@@ -76,16 +76,18 @@ select {
 }
 
 .glass {
-  border: 1px solid var(--line);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow:
+    0 18px 60px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(20px);
 }
 
 .glass-strong {
-  border: 1px solid var(--line-strong);
   background: var(--surface-strong);
-  box-shadow: var(--shadow);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(24px);
 }
 

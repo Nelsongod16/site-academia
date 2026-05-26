@@ -8,11 +8,11 @@ import type { HTMLMotionProps } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export function Surface({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("glass rounded-[24px] border p-4", className)} {...props} />;
+  return <div className={cn("glass rounded-[24px] p-4", className)} {...props} />;
 }
 
 export function StrongSurface({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("glass-strong rounded-[26px] border p-4", className)} {...props} />;
+  return <div className={cn("glass-strong rounded-[26px] p-4", className)} {...props} />;
 }
 
 export function Button({
@@ -39,7 +39,7 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   return (
     <input
       className={cn(
-        "h-11 w-full rounded-[16px] border border-white/8 bg-white/4 px-4 text-sm text-white placeholder:text-[var(--muted)]",
+        "h-11 w-full rounded-[16px] bg-white/6 px-4 text-sm text-white placeholder:text-[var(--muted)]",
         className,
       )}
       {...props}
@@ -51,7 +51,7 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
   return (
     <textarea
       className={cn(
-        "min-h-24 w-full rounded-[18px] border border-white/8 bg-white/4 px-4 py-3 text-sm text-white placeholder:text-[var(--muted)]",
+        "min-h-24 w-full rounded-[18px] bg-white/6 px-4 py-3 text-sm text-white placeholder:text-[var(--muted)]",
         className,
       )}
       {...props}
@@ -67,10 +67,10 @@ export function Chip({
   return (
     <button
       className={cn(
-        "rounded-full border px-3 py-1.5 text-xs uppercase tracking-[0.2em] transition",
+        "rounded-full px-3 py-1.5 text-xs uppercase tracking-[0.2em] transition",
         active
-          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-          : "border-white/8 bg-white/4 text-[var(--muted)]",
+          ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+          : "bg-white/6 text-[var(--muted)]",
         className,
       )}
       {...props}

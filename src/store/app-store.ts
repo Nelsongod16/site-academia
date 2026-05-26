@@ -5,7 +5,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { commentsSeed, demoUsers, exerciseLibrary, feedSeed, photoSeed, runSeed, swimSeed, workoutsSeed } from "@/lib/demo-data";
 import { isoNow } from "@/lib/utils";
-import type { SessionUser, SharedSnapshot, WorkoutExercise } from "@/types/app";
+import type { SessionUser, SharedSnapshot, WorkoutExercise, WorkoutKind } from "@/types/app";
 
 type ConnectionHint = "online" | "offline" | "syncing" | "saved";
 
@@ -30,6 +30,7 @@ interface AppState extends SharedSnapshot {
   addWorkoutNote: (workoutId: string, note: string) => void;
   duplicateWorkout: (workoutId: string) => void;
   duplicateLastWeek: () => void;
+  addCustomWorkout: (payload: { title: string; kind: WorkoutKind; durationMinutes: number; muscleGroups: string[] }) => void;
   reorderWorkoutExercises: (workoutId: string, ordered: string[]) => void;
   updateWorkoutExercise: (workoutId: string, exerciseId: string, patch: Partial<WorkoutExercise>) => void;
   addExercisesToWorkout: (workoutId: string, exerciseIds: string[]) => void;
@@ -169,6 +170,43 @@ export const useAppStore = create<AppState>()(
               })),
           ],
         })),
+      addCustomWorkout: ({ title, kind, durationMinutes, muscleGroups }) =>
+        set((state) => {
+          const colorMap: Record<WorkoutKind, string> = {
+            gym: "#9CFF79",
+            run: "#4FD1FF",
+            swim: "#76B8FF",
+            rest: "#C9A7FF",
+          };
+
+          const tagsMap: Record<WorkoutKind, AppState["workouts"][number]["tags"]> = {
+            gym: ["hipertrofia"],
+            run: ["cardio", "resistencia"],
+            swim: ["resistencia"],
+            rest: ["resistencia"],
+          };
+
+          const nextWorkout = {
+            id: crypto.randomUUID(),
+            label: `Extra ${state.workouts.filter((workout) => workout.kind === kind).length + 1}`,
+            date: isoNow(),
+            kind,
+            title,
+            color: colorMap[kind],
+            completed: false,
+            durationMinutes,
+            tags: tagsMap[kind],
+            muscleGroups,
+            quickNote: "Treino criado rapido para ajustar a semana.",
+            exercises: [],
+          };
+
+          return {
+            workouts: [nextWorkout, ...state.workouts],
+            quickWorkoutId: nextWorkout.id,
+            connectionHint: "saved",
+          };
+        }),
       reorderWorkoutExercises: (workoutId, ordered) =>
         set((state) => ({
           workouts: state.workouts.map((workout) => {

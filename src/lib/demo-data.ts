@@ -3,6 +3,11 @@ import { addDays, subDays } from "date-fns";
 import type { Exercise, FeedComment, FeedPost, PhotoEntry, RunEntry, SessionUser, SwimEntry, WorkoutDay } from "@/types/app";
 
 const today = new Date();
+const videoSamples = [
+  "https://samplelib.com/lib/preview/mp4/sample-5s.mp4",
+  "https://samplelib.com/lib/preview/mp4/sample-10s.mp4",
+  "https://samplelib.com/lib/preview/mp4/sample-15s.mp4",
+];
 
 export const demoUsers: SessionUser[] = [
   { id: "user-1", name: "Lia Costa", email: "lia@pulse.app", avatar: "LC", mode: "demo" },
@@ -22,6 +27,7 @@ export const exerciseLibrary: Exercise[] = [
     description: "Press horizontal para volume de peito com progressao clara de carga.",
     execution: "Escapulas firmes, punhos neutros e barra descendo no centro do peito.",
     mediaUrl: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=900&q=80",
+    videoUrl: videoSamples[0],
     relatedIds: ["crucifixo-inclinado", "desenvolvimento-halter"],
   },
   {
@@ -36,6 +42,7 @@ export const exerciseLibrary: Exercise[] = [
     description: "Abre o peito com amplitude controlada e foco em alongamento.",
     execution: "Cotovelo levemente flexionado, desce lento e sobe sem bater os halteres.",
     mediaUrl: "https://images.unsplash.com/photo-1598971639058-a0d4b2d4e995?auto=format&fit=crop&w=900&q=80",
+    videoUrl: videoSamples[1],
     relatedIds: ["supino-reto", "pulley-frontal"],
   },
   {
@@ -50,6 +57,7 @@ export const exerciseLibrary: Exercise[] = [
     description: "Base completa para forca e densidade de pernas.",
     execution: "Pe firme, coluna neutra e profundidade segura mantendo joelho alinhado.",
     mediaUrl: "https://images.unsplash.com/photo-1434682881908-b43d0467b798?auto=format&fit=crop&w=900&q=80",
+    videoUrl: videoSamples[2],
     relatedIds: ["leg-press", "stiff"],
   },
   {
@@ -64,6 +72,7 @@ export const exerciseLibrary: Exercise[] = [
     description: "Volume de perna com execucao estavel e progressao previsivel.",
     execution: "Desce controlado sem tirar o quadril do banco e empurra com o meio do pe.",
     mediaUrl: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=900&q=80",
+    videoUrl: videoSamples[0],
     relatedIds: ["agachamento-livre", "supino-reto"],
   },
   {
@@ -78,6 +87,7 @@ export const exerciseLibrary: Exercise[] = [
     description: "Press vertical para ombro com leitura simples de carga semanal.",
     execution: "Abdomen firme, cotovelos levemente a frente e subida em linha limpa.",
     mediaUrl: "https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=900&q=80",
+    videoUrl: videoSamples[1],
     relatedIds: ["remada-baixa", "supino-reto"],
   },
   {
@@ -92,6 +102,7 @@ export const exerciseLibrary: Exercise[] = [
     description: "Puxada vertical estavel para largura de dorsais.",
     execution: "Puxa com o cotovelo para baixo, peito aberto e sem balancar o tronco.",
     mediaUrl: "https://images.unsplash.com/photo-1571019613914-85f342c55f55?auto=format&fit=crop&w=900&q=80",
+    videoUrl: videoSamples[2],
     relatedIds: ["remada-baixa", "rosca-direta"],
   },
   {
@@ -106,6 +117,7 @@ export const exerciseLibrary: Exercise[] = [
     description: "Puxada horizontal com foco em densidade e estabilidade escapular.",
     execution: "Segura o tronco firme, finaliza com cotovelos atras e retorna lento.",
     mediaUrl: "https://images.unsplash.com/photo-1517960413843-0aee8e2b3285?auto=format&fit=crop&w=900&q=80",
+    videoUrl: videoSamples[0],
     relatedIds: ["pulley-frontal", "desenvolvimento-halter"],
   },
   {
@@ -120,6 +132,7 @@ export const exerciseLibrary: Exercise[] = [
     description: "Isolamento direto de biceps para complementar puxadas.",
     execution: "Cotovelo preso, sobe sem roubar e desce mantendo tensao.",
     mediaUrl: "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?auto=format&fit=crop&w=900&q=80",
+    videoUrl: videoSamples[1],
     relatedIds: ["pulley-frontal", "remada-baixa"],
   },
   {
@@ -134,6 +147,7 @@ export const exerciseLibrary: Exercise[] = [
     description: "Base aerobica para consistencia semanal e recuperacao ativa.",
     execution: "Ritmo conversavel, passada curta e postura alta.",
     mediaUrl: "https://images.unsplash.com/photo-1486218119243-13883505764c?auto=format&fit=crop&w=900&q=80",
+    videoUrl: videoSamples[2],
     relatedIds: ["nado-livre", "agachamento-livre"],
   },
   {
@@ -148,6 +162,7 @@ export const exerciseLibrary: Exercise[] = [
     description: "Resistencia geral com baixo impacto articular.",
     execution: "Respiracao lateral regular, cotovelo alto e deslize consistente.",
     mediaUrl: "https://images.unsplash.com/photo-1519315901367-f34ff9154487?auto=format&fit=crop&w=900&q=80",
+    videoUrl: videoSamples[0],
     relatedIds: ["corrida-leve", "remada-baixa"],
   },
 ];

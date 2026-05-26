@@ -61,6 +61,7 @@ export interface Exercise {
   description: string;
   execution: string;
   mediaUrl: string;
+  videoUrl?: string;
   favorite?: boolean;
   relatedIds: string[];
 }
