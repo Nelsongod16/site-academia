@@ -1,34 +1,49 @@
 "use client";
 
-import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import { closestCenter, DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowRight, CheckCircle2, Copy, Plus, Sparkles, StretchHorizontal } from "lucide-react";
+import { CheckCircle2, Copy, Plus, Search, Sparkles, StretchHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useStore } from "zustand";
 
 import { PageFrame } from "@/components/layout/page-frame";
-import { Button, Chip, Input, SectionHeading, StrongSurface, Surface, Textarea } from "@/components/ui/kit";
-import { formatDuration } from "@/lib/utils";
+import { Button, Chip, Input, SectionHeading, StrongSurface, Surface } from "@/components/ui/kit";
+import { cn, formatDuration } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
+import type { Exercise, WorkoutExercise, WorkoutKind } from "@/types/app";
 
-function SortableExercise({
-  id,
-  name,
-  sets,
-  reps,
-  weight,
-  note,
-  onChange,
-}: {
-  id: string;
-  name: string;
+const muscleGroupOptions = ["peito", "ombro", "triceps", "costas", "biceps", "quadriceps", "gluteo", "posterior", "cardio"];
+
+type BuilderConfig = {
   sets: number;
   reps: string;
   weight: string;
-  note?: string;
-  onChange: (patch: { sets?: number; reps?: string; weight?: string; note?: string }) => void;
+  note: string;
+};
+
+function matchesGroup(exercise: Exercise, group: string) {
+  return (
+    exercise.muscle.toLowerCase().includes(group.toLowerCase()) ||
+    exercise.secondaryMuscles.some((item) => item.toLowerCase().includes(group.toLowerCase()))
+  );
+}
+
+function WorkoutExerciseCard({
+  id,
+  detail,
+  exercise,
+  index,
+  total,
+  onChange,
+}: {
+  id: string;
+  detail: Exercise;
+  exercise: WorkoutExercise;
+  index: number;
+  total: number;
+  onChange: (patch: Partial<WorkoutExercise>) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
 
@@ -36,23 +51,100 @@ function SortableExercise({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className="rounded-[22px] bg-white/4 p-4"
+      className="overflow-hidden rounded-[18px] border border-white/6 bg-white/[0.03]"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium">{name}</p>
-          <p className="mt-1 text-xs text-[var(--muted)]">Ultima carga salva visivel no card.</p>
+      <div className="grid md:grid-cols-[132px_1fr]">
+        <img src={detail.mediaUrl} alt={detail.name} className="h-full min-h-[138px] w-full object-cover" />
+        <div className="space-y-4 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">
+                bloco {String(index + 1).padStart(2, "0")}
+              </p>
+              <h3 className="mt-2 text-lg font-semibold tracking-[-0.04em]">{detail.name}</h3>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                {detail.muscle} / {detail.equipment}
+              </p>
+            </div>
+
+            <button className="rounded-[14px] bg-white/6 p-3 text-[var(--muted)]" {...attributes} {...listeners}>
+              <StretchHorizontal className="size-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <Input value={String(exercise.sets)} onChange={(event) => onChange({ sets: Number(event.target.value) || 0 })} placeholder="Series" />
+            <Input value={exercise.reps} onChange={(event) => onChange({ reps: event.target.value })} placeholder="Reps" />
+            <Input value={exercise.weight} onChange={(event) => onChange({ weight: event.target.value })} placeholder="Carga" />
+          </div>
+
+          <Input value={exercise.note ?? ""} onChange={(event) => onChange({ note: event.target.value })} placeholder="Observacao" />
+
+          <div>
+            <div className="mb-2 flex items-center justify-between text-xs text-[var(--muted)]">
+              <span>progresso do bloco</span>
+              <span>{Math.round(((index + 1) / Math.max(total, 1)) * 100)}%</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/6">
+              <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(((index + 1) / Math.max(total, 1)) * 100)}%` }} />
+            </div>
+          </div>
         </div>
-        <button className="rounded-full bg-white/8 p-2 text-[var(--muted)]" {...attributes} {...listeners}>
-          <StretchHorizontal className="size-4" />
-        </button>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <Input value={String(sets)} onChange={(event) => onChange({ sets: Number(event.target.value) || 0 })} />
-        <Input value={reps} onChange={(event) => onChange({ reps: event.target.value })} />
-        <Input value={weight} onChange={(event) => onChange({ weight: event.target.value })} />
+    </div>
+  );
+}
+
+function BuilderExerciseCard({
+  exercise,
+  selected,
+  config,
+  onToggle,
+  onChange,
+}: {
+  exercise: Exercise;
+  selected: boolean;
+  config?: BuilderConfig;
+  onToggle: () => void;
+  onChange: (patch: Partial<BuilderConfig>) => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-[18px] border border-white/6 bg-white/[0.03]">
+      <div className="grid grid-cols-[112px_1fr]">
+        <img src={exercise.mediaUrl} alt={exercise.name} className="h-full min-h-[144px] w-full object-cover" />
+        <div className="space-y-3 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold tracking-[-0.03em]">{exercise.name}</h3>
+              <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+                {exercise.muscle} / {exercise.equipment}
+              </p>
+            </div>
+            <button
+              onClick={onToggle}
+              className={cn(
+                "rounded-[12px] px-3 py-2 text-xs uppercase tracking-[0.18em] transition",
+                selected ? "bg-white text-black" : "bg-white/6 text-white",
+              )}
+            >
+              {selected ? "remover" : "adicionar"}
+            </button>
+          </div>
+
+          {selected ? (
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 gap-2">
+                <Input value={String(config?.sets ?? 3)} onChange={(event) => onChange({ sets: Number(event.target.value) || 0 })} placeholder="Series" />
+                <Input value={config?.reps ?? "10-12"} onChange={(event) => onChange({ reps: event.target.value })} placeholder="Reps" />
+                <Input value={config?.weight ?? "carga livre"} onChange={(event) => onChange({ weight: event.target.value })} placeholder="Carga" />
+              </div>
+              <Input value={config?.note ?? ""} onChange={(event) => onChange({ note: event.target.value })} placeholder="Observacao" />
+            </div>
+          ) : (
+            <p className="text-sm leading-6 text-[var(--muted)]">{exercise.description}</p>
+          )}
+        </div>
       </div>
-      <Input className="mt-2" value={note ?? ""} onChange={(event) => onChange({ note: event.target.value })} placeholder="Nota rapida" />
     </div>
   );
 }
@@ -72,21 +164,77 @@ export function TrainingScreen() {
   const addExercisesToWorkout = useStore(useAppStore, (state) => state.addExercisesToWorkout);
   const quickWorkoutId = useStore(useAppStore, (state) => state.quickWorkoutId);
   const setQuickWorkout = useStore(useAppStore, (state) => state.setQuickWorkout);
-  const [selectedId, setSelectedId] = useState(quickWorkoutId ?? workouts[0]?.id);
   const [newTitle, setNewTitle] = useState("");
   const [newDuration, setNewDuration] = useState("60");
-  const [newKind, setNewKind] = useState<"gym" | "run" | "swim">("gym");
-  const [newGroups, setNewGroups] = useState("peito, ombro, triceps");
+  const [newKind, setNewKind] = useState<WorkoutKind>("gym");
+  const [newGroups, setNewGroups] = useState<string[]>(["peito", "ombro", "triceps"]);
+  const [builderSearch, setBuilderSearch] = useState("");
+  const [builderExercises, setBuilderExercises] = useState<Record<string, BuilderConfig>>({});
 
   const sensors = useSensors(useSensor(PointerSensor));
-  const selectedWorkout = workouts.find((workout) => workout.id === selectedId) ?? workouts[0];
-  const favoriteExercises = exercises.filter((exercise) => favoriteExerciseIds.includes(exercise.id)).slice(0, 6);
-  const recentExercises = exercises.filter((exercise) => recentExerciseIds.includes(exercise.id)).slice(0, 6);
+  const selectedWorkout = workouts.find((workout) => workout.id === quickWorkoutId) ?? workouts[0];
+  const selectedWorkoutDetails = selectedWorkout?.exercises
+    .map((exercise) => ({
+      detail: exercises.find((item) => item.id === exercise.exerciseId),
+      record: exercise,
+    }))
+    .filter((item): item is { detail: Exercise; record: WorkoutExercise } => Boolean(item.detail));
 
-  const progress = useMemo(() => {
-    const done = workouts.filter((workout) => workout.completed).length;
-    return Math.round((done / Math.max(workouts.length, 1)) * 100);
-  }, [workouts]);
+  const currentHeroImage = selectedWorkoutDetails?.[0]?.detail.mediaUrl ?? exercises[0]?.mediaUrl;
+  const completionRatio = selectedWorkout?.completed
+    ? 100
+    : Math.min(94, 28 + (selectedWorkout?.exercises.length ?? 0) * 18);
+  const favoriteExercises = exercises.filter((exercise) => favoriteExerciseIds.includes(exercise.id)).slice(0, 4);
+  const recentExercises = exercises.filter((exercise) => recentExerciseIds.includes(exercise.id)).slice(0, 4);
+  const builderSelectionCount = Object.keys(builderExercises).length;
+
+  const builderCandidates = useMemo(() => {
+    const query = builderSearch.trim().toLowerCase();
+    const filtered = exercises.filter((exercise) => {
+      if (newKind === "gym") {
+        if (!newGroups.length) {
+          return false;
+        }
+
+        const groupMatch = newGroups.some((group) => matchesGroup(exercise, group));
+        if (!groupMatch) {
+          return false;
+        }
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      return `${exercise.name} ${exercise.muscle} ${exercise.description}`.toLowerCase().includes(query);
+    });
+
+    return filtered.sort((a, b) => Number(Boolean(builderExercises[b.id])) - Number(Boolean(builderExercises[a.id])));
+  }, [builderExercises, builderSearch, exercises, newGroups, newKind]);
+
+  function toggleGroup(group: string) {
+    setNewGroups((state) => (state.includes(group) ? state.filter((item) => item !== group) : [...state, group]));
+  }
+
+  function toggleBuilderExercise(exerciseId: string) {
+    setBuilderExercises((state) => {
+      if (state[exerciseId]) {
+        const nextState = { ...state };
+        delete nextState[exerciseId];
+        return nextState;
+      }
+
+      return {
+        ...state,
+        [exerciseId]: {
+          sets: 3,
+          reps: "10-12",
+          weight: "carga livre",
+          note: "",
+        },
+      };
+    });
+  }
 
   function handleCreateWorkout() {
     const title = newTitle.trim();
@@ -94,141 +242,249 @@ export function TrainingScreen() {
       return;
     }
 
-    const muscleGroups = newGroups
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const muscleGroups = newKind === "gym" ? newGroups : ["cardio"];
+    const builtExercises = Object.entries(builderExercises).map(([exerciseId, config]) => ({
+      exerciseId,
+      sets: config.sets,
+      reps: config.reps,
+      weight: config.weight,
+      note: config.note,
+    }));
+
+    if (newKind === "gym" && builtExercises.length === 0) {
+      return;
+    }
 
     addCustomWorkout({
       title,
       kind: newKind,
       durationMinutes: Number(newDuration) || 45,
       muscleGroups: muscleGroups.length ? muscleGroups : ["cardio"],
+      exercises: builtExercises,
     });
 
     setNewTitle("");
     setNewDuration("60");
+    setBuilderSearch("");
+    setBuilderExercises({});
+    setNewGroups(["peito", "ombro", "triceps"]);
+  }
+
+  if (!selectedWorkout) {
+    return null;
   }
 
   return (
-    <PageFrame>
-      <StrongSurface className="rounded-[30px]">
-        <SectionHeading eyebrow="treino semanal" title="Semana organizada" action={<Link href="/exercises" className="text-sm text-[var(--accent)]">abrir biblioteca</Link>} />
-        <div className="mt-5 grid gap-3 md:grid-cols-[1.3fr_0.7fr]">
-          <div className="rounded-[24px] bg-white/5 p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">novo treino</p>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
+    <PageFrame className="gap-5">
+      <StrongSurface className="overflow-hidden rounded-[24px] p-0">
+        <div className="relative min-h-[340px]">
+          <img src={currentHeroImage} alt={selectedWorkout.title} className="absolute inset-0 h-full w-full object-cover" />
+          <div className="cinema-overlay absolute inset-0" />
+          <div className="relative flex min-h-[340px] flex-col justify-between p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-white/80">
+                treino atual
+              </div>
+              <AnimatePresence mode="wait">
+                {selectedWorkout.completed ? (
+                  <motion.div
+                    key="complete"
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="flex items-center gap-2 rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-[var(--accent)]"
+                  >
+                    <CheckCircle2 className="size-4" />
+                    concluido
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="progress"
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="rounded-full bg-black/35 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-white/72"
+                  >
+                    progresso em curso
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <div className="space-y-5">
+              <div className="max-w-xl">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-white/60">{selectedWorkout.label}</p>
+                <h2 className="mt-2 text-4xl font-semibold tracking-[-0.08em]">{selectedWorkout.title}</h2>
+                <p className="mt-3 text-sm text-white/72">
+                  {formatDuration(selectedWorkout.durationMinutes)} / {selectedWorkout.exercises.length} exercicios / {selectedWorkout.muscleGroups.join(" / ")}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-white/68">
+                  <span>progresso visual</span>
+                  <span>{completionRatio}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-white/10">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${completionRatio}%` }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className="h-full rounded-full bg-[var(--accent)]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button variant={selectedWorkout.completed ? "secondary" : "primary"} onClick={() => toggleWorkoutCompleted(selectedWorkout.id)}>
+                  {selectedWorkout.completed ? "Treino concluido" : "Concluir treino"}
+                </Button>
+                <Button variant="secondary" onClick={() => duplicateWorkout(selectedWorkout.id)} className="gap-2">
+                  <Copy className="size-4" />
+                  Duplicar
+                </Button>
+                <Button variant="ghost" onClick={() => duplicateLastWeek()}>
+                  Repetir semana passada
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </StrongSurface>
+
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        {workouts.map((workout) => {
+          const cover = exercises.find((exercise) => exercise.id === workout.exercises[0]?.exerciseId)?.mediaUrl ?? currentHeroImage;
+
+          return (
+            <button
+              key={workout.id}
+              onClick={() => {
+                setQuickWorkout(workout.id);
+              }}
+              className={cn(
+                "relative min-h-[180px] min-w-[210px] overflow-hidden rounded-[20px] border border-white/7 text-left",
+                workout.id === selectedWorkout.id ? "ring-1 ring-[var(--accent)]" : "",
+              )}
+            >
+              <img src={cover} alt={workout.title} className="absolute inset-0 h-full w-full object-cover" />
+              <div className="cinema-overlay absolute inset-0" />
+              <div className="relative flex min-h-[180px] flex-col justify-between p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="rounded-full bg-black/30 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white/72">
+                    {workout.kind}
+                  </span>
+                  {workout.completed ? <CheckCircle2 className="size-4 text-[var(--accent)]" /> : null}
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-white/58">{workout.label}</p>
+                  <p className="mt-2 text-xl font-semibold tracking-[-0.05em]">{workout.title}</p>
+                  <p className="mt-2 text-sm text-white/72">{workout.muscleGroups.join(" / ")}</p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <StrongSurface className="rounded-[22px]">
+        <SectionHeading eyebrow="smart builder" title="Criar treino por grupo muscular" />
+        <div className="mt-4 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="space-y-4">
+            <div className="grid gap-2 sm:grid-cols-2">
               <Input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder="Ex: Upper focado em peito" />
               <Input value={newDuration} onChange={(event) => setNewDuration(event.target.value)} placeholder="Duracao em minutos" />
             </div>
-            <div className="mt-2 flex flex-wrap gap-2">
+
+            <div className="flex flex-wrap gap-2">
               {(["gym", "run", "swim"] as const).map((kind) => (
                 <Chip key={kind} active={newKind === kind} onClick={() => setNewKind(kind)}>
                   {kind}
                 </Chip>
               ))}
             </div>
-            <Input className="mt-2" value={newGroups} onChange={(event) => setNewGroups(event.target.value)} placeholder="Musculos: peito, costas, cardio" />
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button onClick={handleCreateWorkout} className="gap-2">
-                <Plus className="size-4" />
-                Adicionar treino
-              </Button>
-              <Link href="/dashboard" className="inline-flex min-h-11 items-center rounded-[16px] bg-white/8 px-4 text-sm text-white">
-                voltar ao inicio
-              </Link>
-            </div>
-          </div>
-          <div className="rounded-[24px] bg-white/5 p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">atalhos</p>
-            <div className="mt-3 space-y-2">
-              <Link href="/feed" className="flex items-center justify-between rounded-[18px] bg-white/6 px-4 py-3">
-                <span className="text-sm">Compartilhar treino no feed</span>
-                <ArrowRight className="size-4 text-[var(--accent)]" />
-              </Link>
-              <Link href="/exercises" className="flex items-center justify-between rounded-[18px] bg-white/6 px-4 py-3">
-                <span className="text-sm">Adicionar exercicios com video</span>
-                <ArrowRight className="size-4 text-[var(--accent)]" />
-              </Link>
-            </div>
-          </div>
-        </div>
 
-        <div className="mt-4 overflow-x-auto">
-          <div className="flex min-w-max gap-3">
-            {workouts.map((workout) => (
-              <button
-                key={workout.id}
-                onClick={() => {
-                  setSelectedId(workout.id);
-                  setQuickWorkout(workout.id);
-                }}
-                className={`min-w-[168px] rounded-[22px] p-4 text-left transition ${
-                  workout.id === selectedWorkout.id ? "bg-white/12" : "bg-white/5"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">{workout.label}</p>
-                  {workout.completed ? <CheckCircle2 className="size-4 text-[var(--accent)]" /> : null}
+            {newKind === "gym" ? (
+              <div className="space-y-3">
+                <p className="text-sm text-[var(--muted)]">
+                  Escolha grupos musculares e o sistema sugere exercicios com imagem, carga, reps, series e observacoes.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {muscleGroupOptions.map((group) => (
+                    <Chip key={group} active={newGroups.includes(group)} onClick={() => toggleGroup(group)}>
+                      {group}
+                    </Chip>
+                  ))}
                 </div>
-                <p className="mt-2 text-lg font-semibold">{workout.title}</p>
-                <p className="mt-1 text-xs text-[var(--muted)]">{workout.muscleGroups.join(" · ")}</p>
-                <div className="mt-4 h-1.5 rounded-full bg-white/6">
-                  <div className="h-full rounded-full" style={{ width: `${workout.completed ? 100 : 52}%`, background: workout.color }} />
+              </div>
+            ) : (
+              <div className="rounded-[16px] bg-white/4 p-4 text-sm text-[var(--muted)]">
+                Para corrida e natacao, crie um bloco rapido e deixe o feed receber a sessao depois.
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 rounded-[16px] bg-white/4 px-4 py-3">
+              <Search className="size-4 text-[var(--muted)]" />
+              <input
+                value={builderSearch}
+                onChange={(event) => setBuilderSearch(event.target.value)}
+                placeholder="Buscar exercicio dentro do construtor"
+                className="w-full bg-transparent text-sm text-white placeholder:text-[var(--muted)]"
+              />
+            </div>
+
+            <div className="rounded-[18px] bg-white/4 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">selecionados</p>
+                  <p className="mt-2 text-lg font-semibold">{builderSelectionCount} exercicios no treino</p>
                 </div>
-              </button>
-            ))}
+                <Button onClick={handleCreateWorkout} className="gap-2" disabled={!newTitle.trim() || (newKind === "gym" && builderSelectionCount === 0)}>
+                  <Plus className="size-4" />
+                  Criar treino
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="mt-4 rounded-[18px] bg-white/5 p-3">
-          <p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">progresso semanal</p>
-          <div className="mt-2 h-2 rounded-full bg-white/6">
-            <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${progress}%` }} />
+
+          <div className="space-y-3">
+            {builderCandidates.length ? (
+              builderCandidates.map((exercise) => (
+                <BuilderExerciseCard
+                  key={exercise.id}
+                  exercise={exercise}
+                  selected={Boolean(builderExercises[exercise.id])}
+                  config={builderExercises[exercise.id]}
+                  onToggle={() => toggleBuilderExercise(exercise.id)}
+                  onChange={(patch) =>
+                    setBuilderExercises((state) => ({
+                      ...state,
+                      [exercise.id]: {
+                        ...state[exercise.id],
+                        ...patch,
+                      },
+                    }))
+                  }
+                />
+              ))
+            ) : (
+              <div className="rounded-[18px] border border-dashed border-white/10 bg-white/3 p-6 text-sm text-[var(--muted)]">
+                Selecione grupos musculares para liberar sugestoes relacionadas.
+              </div>
+            )}
           </div>
         </div>
       </StrongSurface>
 
-      <Surface className="rounded-[28px]">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--muted)]">treino do dia</p>
-            <h3 className="mt-2 text-2xl font-semibold tracking-[-0.05em]">{selectedWorkout.title}</h3>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              {formatDuration(selectedWorkout.durationMinutes)} · {selectedWorkout.exercises.length} exercicios · {selectedWorkout.muscleGroups.join(" · ")}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant={selectedWorkout.completed ? "secondary" : "primary"} onClick={() => toggleWorkoutCompleted(selectedWorkout.id)}>
-              {selectedWorkout.completed ? "Concluido" : "Marcar concluido"}
-            </Button>
-            <Button variant="secondary" onClick={() => duplicateWorkout(selectedWorkout.id)} className="gap-2">
-              <Copy className="size-4" />
-              Copiar
-            </Button>
-            <Button variant="ghost" onClick={() => duplicateLastWeek()}>
-              Duplicar semana passada
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {selectedWorkout.tags.map((tag) => (
-            <Chip key={tag} active>
-              {tag}
-            </Chip>
-          ))}
-        </div>
-
-        <Textarea
+      <Surface className="rounded-[22px]">
+        <SectionHeading eyebrow="in session" title="Exercicios do treino atual" />
+        <Input
           className="mt-4"
           value={selectedWorkout.quickNote ?? ""}
           onChange={(event) => addWorkoutNote(selectedWorkout.id, event.target.value)}
-          placeholder="Observacao rapida do treino"
+          placeholder="Observacao geral do treino"
         />
-      </Surface>
 
-      <Surface className="rounded-[28px]">
-        <SectionHeading eyebrow="tempo real" title="Exercicios do treino" />
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -237,6 +493,7 @@ export function TrainingScreen() {
             if (!over || active.id === over.id) {
               return;
             }
+
             const items = selectedWorkout.exercises.map((exercise) => exercise.exerciseId);
             const oldIndex = items.indexOf(String(active.id));
             const newIndex = items.indexOf(String(over.id));
@@ -245,56 +502,69 @@ export function TrainingScreen() {
         >
           <SortableContext items={selectedWorkout.exercises.map((exercise) => exercise.exerciseId)} strategy={verticalListSortingStrategy}>
             <div className="mt-4 space-y-3">
-              {selectedWorkout.exercises.map((exercise) => {
-                const detail = exercises.find((item) => item.id === exercise.exerciseId);
-                if (!detail) {
-                  return null;
-                }
-
-                return (
-                  <SortableExercise
-                    key={exercise.exerciseId}
-                    id={exercise.exerciseId}
-                    name={detail.name}
-                    sets={exercise.sets}
-                    reps={exercise.reps}
-                    weight={exercise.weight}
-                    note={exercise.note}
-                    onChange={(patch) => updateWorkoutExercise(selectedWorkout.id, exercise.exerciseId, patch)}
-                  />
-                );
-              })}
+              {selectedWorkoutDetails?.map(({ detail, record }, index) => (
+                <WorkoutExerciseCard
+                  key={record.exerciseId}
+                  id={record.exerciseId}
+                  detail={detail}
+                  exercise={record}
+                  index={index}
+                  total={selectedWorkout.exercises.length}
+                  onChange={(patch) => updateWorkoutExercise(selectedWorkout.id, record.exerciseId, patch)}
+                />
+              ))}
             </div>
           </SortableContext>
         </DndContext>
       </Surface>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Surface className="rounded-[28px]">
+        <Surface className="rounded-[20px]">
           <SectionHeading eyebrow="favoritos" title="Adicionar rapido" />
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 space-y-3">
             {favoriteExercises.map((exercise) => (
-              <Chip key={exercise.id} onClick={() => addExercisesToWorkout(selectedWorkout.id, [exercise.id])}>
-                {exercise.name}
-              </Chip>
+              <button
+                key={exercise.id}
+                onClick={() => addExercisesToWorkout(selectedWorkout.id, [exercise.id])}
+                className="flex w-full items-center gap-3 rounded-[16px] bg-white/4 p-3 text-left transition hover:bg-white/6"
+              >
+                <img src={exercise.mediaUrl} alt={exercise.name} className="size-14 rounded-[14px] object-cover" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{exercise.name}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">{exercise.muscle}</p>
+                </div>
+                <Plus className="size-4 text-[var(--accent)]" />
+              </button>
             ))}
           </div>
         </Surface>
-        <Surface className="rounded-[28px]">
-          <SectionHeading eyebrow="ultimos usados" title="Sugestoes relacionadas" />
-          <div className="mt-4 flex flex-wrap gap-2">
+
+        <Surface className="rounded-[20px]">
+          <SectionHeading eyebrow="recentes" title="Sugestoes quentes" />
+          <div className="mt-4 space-y-3">
             {recentExercises.map((exercise) => (
-              <Chip key={exercise.id} onClick={() => addExercisesToWorkout(selectedWorkout.id, [exercise.id])}>
-                {exercise.name}
-              </Chip>
+              <button
+                key={exercise.id}
+                onClick={() => addExercisesToWorkout(selectedWorkout.id, [exercise.id])}
+                className="flex w-full items-center gap-3 rounded-[16px] bg-white/4 p-3 text-left transition hover:bg-white/6"
+              >
+                <img src={exercise.mediaUrl} alt={exercise.name} className="size-14 rounded-[14px] object-cover" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{exercise.name}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">{exercise.equipment}</p>
+                </div>
+                <Plus className="size-4 text-[var(--accent)]" />
+              </button>
             ))}
           </div>
         </Surface>
       </div>
 
-      <Surface className="flex items-center gap-3 rounded-[22px] bg-white/5">
+      <Surface className="flex items-center gap-3 rounded-[18px] bg-white/4">
         <Sparkles className="size-4 text-[var(--accent)]" />
-        <p className="text-sm text-[var(--muted)]">Treinos separados por secao, com criacao rapida, biblioteca de exercicios e fluxo social conectado.</p>
+        <p className="text-sm text-[var(--muted)]">
+          Biblioteca removida da navegação. Agora o treino nasce dentro do construtor com imagem, carga, reps, series e observacoes.
+        </p>
       </Surface>
     </PageFrame>
   );

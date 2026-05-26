@@ -9,6 +9,8 @@ export interface SessionUser {
   email: string;
   avatar: string;
   mode: "demo" | "firebase";
+  avatarImage?: string;
+  bio?: string;
 }
 
 export interface FeedComment {
@@ -23,6 +25,8 @@ export interface FeedPost {
   authorId: string;
   authorName: string;
   avatar: string;
+  activityLabel: string;
+  metricLabel?: string;
   type: "workout" | "run" | "swim" | "progress";
   caption: string;
   image: string;
@@ -36,6 +40,37 @@ export interface FeedPost {
   streakDays: number;
   consecutiveDays: number;
   statsLabel: string;
+}
+
+export interface AthleteAchievement {
+  title: string;
+  detail: string;
+}
+
+export interface AthleteProfile {
+  id: string;
+  name: string;
+  handle: string;
+  email: string;
+  avatar: string;
+  avatarImage: string;
+  coverImage: string;
+  bio: string;
+  city: string;
+  specialty: string;
+  followers: number;
+  following: number;
+  streak: number;
+  weeklyFrequency: number;
+  totalWorkouts: number;
+  totalRuns: number;
+  totalDistanceKm: number;
+  lastWorkout: string;
+  lastRun?: string;
+  lastActivity: string;
+  achievements: AthleteAchievement[];
+  isFollowing: boolean;
+  isFriend: boolean;
 }
 
 export interface PhotoEntry {
@@ -107,6 +142,7 @@ export interface SwimEntry {
 export interface SharedSnapshot {
   feedPosts: FeedPost[];
   commentsByPost: Record<string, FeedComment[]>;
+  profiles: AthleteProfile[];
   photos: PhotoEntry[];
   workouts: WorkoutDay[];
   exercises: Exercise[];

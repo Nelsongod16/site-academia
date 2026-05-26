@@ -8,11 +8,11 @@ import type { HTMLMotionProps } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export function Surface({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("glass rounded-[24px] p-4", className)} {...props} />;
+  return <div className={cn("glass rounded-[18px] border border-white/6 p-4", className)} {...props} />;
 }
 
 export function StrongSurface({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("glass-strong rounded-[26px] p-4", className)} {...props} />;
+  return <div className={cn("glass-strong rounded-[20px] border border-white/7 p-4", className)} {...props} />;
 }
 
 export function Button({
@@ -29,7 +29,11 @@ export function Button({
   return (
     <motion.button
       whileTap={{ scale: 0.98 }}
-      className={cn("inline-flex min-h-11 items-center justify-center rounded-[16px] px-4 text-sm font-medium transition", styles, className)}
+      className={cn(
+        "inline-flex min-h-11 items-center justify-center rounded-[14px] px-4 text-sm font-medium transition disabled:pointer-events-none disabled:opacity-50",
+        styles,
+        className,
+      )}
       {...props}
     />
   );
@@ -39,7 +43,7 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   return (
     <input
       className={cn(
-        "h-11 w-full rounded-[16px] bg-white/6 px-4 text-sm text-white placeholder:text-[var(--muted)]",
+        "h-11 w-full rounded-[14px] bg-white/5 px-4 text-sm text-white placeholder:text-[var(--muted)]",
         className,
       )}
       {...props}
@@ -51,7 +55,7 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
   return (
     <textarea
       className={cn(
-        "min-h-24 w-full rounded-[18px] bg-white/6 px-4 py-3 text-sm text-white placeholder:text-[var(--muted)]",
+        "min-h-24 w-full rounded-[14px] bg-white/5 px-4 py-3 text-sm text-white placeholder:text-[var(--muted)]",
         className,
       )}
       {...props}
@@ -70,7 +74,7 @@ export function Chip({
         "rounded-full px-3 py-1.5 text-xs uppercase tracking-[0.2em] transition",
         active
           ? "bg-[var(--accent-soft)] text-[var(--accent)]"
-          : "bg-white/6 text-[var(--muted)]",
+          : "bg-white/5 text-[var(--muted)]",
         className,
       )}
       {...props}
@@ -119,7 +123,7 @@ export function SectionHeading({
 }
 
 export function SkeletonBlock({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-[18px] bg-white/5", className)} />;
+  return <div className={cn("animate-pulse rounded-[14px] bg-white/5", className)} />;
 }
 
 export function LoadingInline({ label = "salvando" }: { label?: string }) {

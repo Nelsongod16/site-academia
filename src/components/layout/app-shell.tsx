@@ -30,9 +30,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell min-h-screen">
-      <div className="mx-auto max-w-6xl px-4 pb-28 pt-4 sm:px-6">
+      <div className="mx-auto max-w-6xl px-3 pb-28 pt-4 sm:px-5">
         <TopBar />
-        <main className="mt-4">{children}</main>
+        <main className="mt-3">{children}</main>
       </div>
       <BottomNav />
     </div>

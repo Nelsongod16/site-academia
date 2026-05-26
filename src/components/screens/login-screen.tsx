@@ -23,12 +23,12 @@ export function LoginScreen() {
 
   useEffect(() => {
     if (hasHydrated && sessionUser) {
-      router.replace("/dashboard");
+      router.replace("/feed");
     }
   }, [hasHydrated, router, sessionUser]);
 
   function enterApp() {
-    router.push("/dashboard");
+    router.push("/feed");
   }
 
   async function handleFirebaseLogin() {

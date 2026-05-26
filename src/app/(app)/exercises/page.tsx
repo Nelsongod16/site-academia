@@ -1,5 +1,5 @@
-import { ExercisesScreen } from "@/components/screens/exercises-screen";
+import { redirect } from "next/navigation";
 
 export default function ExercisesPage() {
-  return <ExercisesScreen />;
+  redirect("/training");
 }

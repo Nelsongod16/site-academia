@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import { commentsSeed, demoUsers, exerciseLibrary, feedSeed, photoSeed, runSeed, swimSeed, workoutsSeed } from "@/lib/demo-data";
+import { commentsSeed, communityProfiles, demoUsers, exerciseLibrary, feedSeed, photoSeed, runSeed, swimSeed, workoutsSeed } from "@/lib/demo-data";
 import { isoNow } from "@/lib/utils";
 import type { SessionUser, SharedSnapshot, WorkoutExercise, WorkoutKind } from "@/types/app";
 
@@ -13,7 +13,6 @@ interface AppState extends SharedSnapshot {
   hasHydrated: boolean;
   sessionUser: SessionUser | null;
   syncMode: "local" | "firebase-ready" | "firebase-live";
-  dashboardOrder: string[];
   quickWorkoutId: string | null;
   commentsByPost: Record<string, { id: string; author: string; text: string; createdAt: string }[]>;
   scrollMemory: Record<string, number>;
@@ -30,26 +29,32 @@ interface AppState extends SharedSnapshot {
   addWorkoutNote: (workoutId: string, note: string) => void;
   duplicateWorkout: (workoutId: string) => void;
   duplicateLastWeek: () => void;
-  addCustomWorkout: (payload: { title: string; kind: WorkoutKind; durationMinutes: number; muscleGroups: string[] }) => void;
+  addCustomWorkout: (payload: {
+    title: string;
+    kind: WorkoutKind;
+    durationMinutes: number;
+    muscleGroups: string[];
+    exercises?: WorkoutExercise[];
+  }) => void;
   reorderWorkoutExercises: (workoutId: string, ordered: string[]) => void;
   updateWorkoutExercise: (workoutId: string, exerciseId: string, patch: Partial<WorkoutExercise>) => void;
   addExercisesToWorkout: (workoutId: string, exerciseIds: string[]) => void;
   favoriteExercise: (exerciseId: string) => void;
+  toggleFollowProfile: (profileId: string) => void;
+  toggleFriendProfile: (profileId: string) => void;
   addPhotoEntries: (entries: { image: string; thumb?: string; label: string; kind: "progress" | "before-after" | "training"; note?: string }[]) => void;
   addRun: (payload: { km: number; meters: number; time: string }) => void;
   addSwim: (payload: { distance: number; time: string }) => void;
   setQuickWorkout: (workoutId: string | null) => void;
-  setDashboardOrder: (order: string[]) => void;
   rememberScroll: (route: string, y: number) => void;
   hydrateSharedSnapshot: (snapshot: SharedSnapshot) => void;
 }
-
-const dashboardOrder = ["today", "volume", "activity", "compare"];
 
 function baseSnapshot(): SharedSnapshot {
   return {
     feedPosts: feedSeed,
     commentsByPost: commentsSeed,
+    profiles: communityProfiles,
     photos: photoSeed,
     workouts: workoutsSeed,
     exercises: exerciseLibrary,
@@ -62,12 +67,11 @@ function baseSnapshot(): SharedSnapshot {
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       ...baseSnapshot(),
       hasHydrated: false,
       sessionUser: null,
       syncMode: "local",
-      dashboardOrder,
       quickWorkoutId: "wed",
       scrollMemory: {},
       connectionHint: "saved",
@@ -75,8 +79,23 @@ export const useAppStore = create<AppState>()(
       setConnectionHint: (value) => set({ connectionHint: value }),
       setSyncMode: (value) => set({ syncMode: value }),
       signInDemo: (userId = "user-1") =>
-        set({
-          sessionUser: demoUsers.find((user) => user.id === userId) ?? demoUsers[0],
+        set((state) => {
+          const profile = state.profiles.find((item) => item.id === userId);
+          const fallback = demoUsers.find((user) => user.id === userId) ?? demoUsers[0];
+
+          return {
+            sessionUser: profile
+              ? {
+                  id: profile.id,
+                  email: profile.email,
+                  name: profile.name,
+                  avatar: profile.avatar,
+                  avatarImage: profile.avatarImage,
+                  bio: profile.bio,
+                  mode: "demo",
+                }
+              : fallback,
+          };
         }),
       signInFirebaseUser: ({ uid, email }) =>
         set({
@@ -85,6 +104,7 @@ export const useAppStore = create<AppState>()(
             email: email ?? "firebase@pulse.app",
             name: email?.split("@")[0] ?? "Firebase User",
             avatar: (email?.slice(0, 2) ?? "FB").toUpperCase(),
+            bio: "Conta conectada com sincronizacao em tempo real.",
             mode: "firebase",
           },
         }),
@@ -117,7 +137,7 @@ export const useAppStore = create<AppState>()(
               ...(state.commentsByPost[postId] ?? []),
               {
                 id: crypto.randomUUID(),
-                author: state.sessionUser?.name ?? "Você",
+                author: state.sessionUser?.name ?? "Voce",
                 text,
                 createdAt: isoNow(),
               },
@@ -170,7 +190,7 @@ export const useAppStore = create<AppState>()(
               })),
           ],
         })),
-      addCustomWorkout: ({ title, kind, durationMinutes, muscleGroups }) =>
+      addCustomWorkout: ({ title, kind, durationMinutes, muscleGroups, exercises = [] }) =>
         set((state) => {
           const colorMap: Record<WorkoutKind, string> = {
             gym: "#9CFF79",
@@ -198,7 +218,7 @@ export const useAppStore = create<AppState>()(
             tags: tagsMap[kind],
             muscleGroups,
             quickNote: "Treino criado rapido para ajustar a semana.",
-            exercises: [],
+            exercises,
           };
 
           return {
@@ -263,6 +283,82 @@ export const useAppStore = create<AppState>()(
             ? state.favoriteExerciseIds.filter((id) => id !== exerciseId)
             : [exerciseId, ...state.favoriteExerciseIds],
         })),
+      toggleFollowProfile: (profileId) =>
+        set((state) => {
+          const currentUserId = state.sessionUser?.id ?? "user-1";
+
+          if (profileId === currentUserId) {
+            return state;
+          }
+
+          let followDelta = 0;
+          const profiles = state.profiles
+            .map((profile) => {
+              if (profile.id !== profileId) {
+                return profile;
+              }
+
+              const isFollowing = !profile.isFollowing;
+              followDelta = isFollowing ? 1 : -1;
+
+              return {
+                ...profile,
+                isFollowing,
+                isFriend: isFollowing ? profile.isFriend : false,
+                followers: Math.max(0, profile.followers + followDelta),
+              };
+            })
+            .map((profile) =>
+              profile.id === currentUserId
+                ? { ...profile, following: Math.max(0, profile.following + followDelta) }
+                : profile,
+            );
+
+          return {
+            profiles,
+            connectionHint: "saved",
+          };
+        }),
+      toggleFriendProfile: (profileId) =>
+        set((state) => {
+          const currentUserId = state.sessionUser?.id ?? "user-1";
+
+          if (profileId === currentUserId) {
+            return state;
+          }
+
+          let followDelta = 0;
+          const profiles = state.profiles
+            .map((profile) => {
+              if (profile.id !== profileId) {
+                return profile;
+              }
+
+              const isFriend = !profile.isFriend;
+              const needsFollow = isFriend && !profile.isFollowing;
+
+              if (needsFollow) {
+                followDelta = 1;
+              }
+
+              return {
+                ...profile,
+                isFriend,
+                isFollowing: needsFollow ? true : profile.isFollowing,
+                followers: Math.max(0, profile.followers + followDelta),
+              };
+            })
+            .map((profile) =>
+              profile.id === currentUserId
+                ? { ...profile, following: Math.max(0, profile.following + followDelta) }
+                : profile,
+            );
+
+          return {
+            profiles,
+            connectionHint: "saved",
+          };
+        }),
       addPhotoEntries: (entries) =>
         set((state) => ({
           photos: [
@@ -286,7 +382,6 @@ export const useAppStore = create<AppState>()(
           connectionHint: "saved",
         })),
       setQuickWorkout: (workoutId) => set({ quickWorkoutId: workoutId }),
-      setDashboardOrder: (order) => set({ dashboardOrder: order }),
       rememberScroll: (route, y) =>
         set((state) => ({
           scrollMemory: {
@@ -296,6 +391,7 @@ export const useAppStore = create<AppState>()(
         })),
       hydrateSharedSnapshot: (snapshot) =>
         set({
+          ...baseSnapshot(),
           ...snapshot,
           syncMode: "firebase-live",
         }),
@@ -309,6 +405,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         feedPosts: state.feedPosts,
         commentsByPost: state.commentsByPost,
+        profiles: state.profiles,
         photos: state.photos,
         workouts: state.workouts,
         exercises: state.exercises,
@@ -316,7 +413,6 @@ export const useAppStore = create<AppState>()(
         swims: state.swims,
         favoriteExerciseIds: state.favoriteExerciseIds,
         recentExerciseIds: state.recentExerciseIds,
-        dashboardOrder: state.dashboardOrder,
         quickWorkoutId: state.quickWorkoutId,
         sessionUser: state.sessionUser,
         scrollMemory: state.scrollMemory,
@@ -329,6 +425,7 @@ export function getSharedSnapshot(state: AppState): SharedSnapshot {
   return {
     feedPosts: state.feedPosts,
     commentsByPost: state.commentsByPost,
+    profiles: state.profiles,
     photos: state.photos,
     workouts: state.workouts,
     exercises: state.exercises,

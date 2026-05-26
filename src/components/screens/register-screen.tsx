@@ -18,7 +18,7 @@ export function RegisterScreen() {
   const [error, setError] = useState("");
 
   function enterApp() {
-    router.push("/dashboard");
+    router.push("/feed");
   }
 
   async function handleRegister() {

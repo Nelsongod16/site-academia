@@ -1,37 +1,40 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowLeft, Plus, Sparkles } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, Plus } from "lucide-react";
 import { useStore } from "zustand";
 
 import { StrongSurface } from "@/components/ui/kit";
 import { useAppStore } from "@/store/app-store";
 
 const routeMeta: Record<string, { eyebrow: string; title: string }> = {
-  "/dashboard": { eyebrow: "visao geral", title: "Seu ciclo" },
-  "/training": { eyebrow: "treino", title: "Semana e novos blocos" },
-  "/exercises": { eyebrow: "biblioteca", title: "Exercicios e videos" },
-  "/feed": { eyebrow: "social", title: "Feed real" },
-  "/profile": { eyebrow: "perfil", title: "Resumo pessoal" },
-  "/settings": { eyebrow: "ajustes", title: "Configuracoes" },
+  "/feed": { eyebrow: "community", title: "Feed" },
+  "/training": { eyebrow: "builder", title: "Treinos" },
+  "/stats": { eyebrow: "performance", title: "Desempenho" },
+  "/profile": { eyebrow: "public profile", title: "Perfil" },
+  "/settings": { eyebrow: "preferences", title: "Ajustes" },
 };
+
+const coreRoutes = new Set(["/feed", "/training", "/stats", "/profile"]);
 
 export function TopBar() {
   const router = useRouter();
   const pathname = usePathname();
   const sessionUser = useStore(useAppStore, (state) => state.sessionUser);
   const meta = routeMeta[pathname] ?? { eyebrow: "pulse studio", title: "Area logada" };
-  const canGoBack = pathname !== "/dashboard";
+  const canGoBack = !coreRoutes.has(pathname);
 
   return (
-    <StrongSurface className="sticky top-4 z-20 flex items-center justify-between gap-4 rounded-[28px] px-4 py-3">
+    <StrongSurface className="sticky top-4 z-20 flex items-center justify-between gap-4 rounded-[18px] px-4 py-3">
       <div className="flex items-center gap-3">
         <button
-          onClick={() => (canGoBack ? router.back() : router.push("/dashboard"))}
-          className="flex size-11 items-center justify-center rounded-full bg-white text-black transition hover:brightness-95"
+          onClick={() => (canGoBack ? router.back() : router.push("/feed"))}
+          className={`flex size-11 items-center justify-center rounded-[14px] transition ${
+            canGoBack ? "bg-white text-black hover:brightness-95" : "bg-[var(--accent-soft)] text-[var(--accent)]"
+          }`}
         >
-          <ArrowLeft className="size-4" />
+          {canGoBack ? <ArrowLeft className="size-4" /> : <Sparkles className="size-4" />}
         </button>
         <div>
           <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--muted)]">{meta.eyebrow}</p>
@@ -40,12 +43,18 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <Link href="/training" className="hidden rounded-full bg-white/8 px-4 py-3 text-sm font-medium text-white md:inline-flex md:items-center md:gap-2">
+        <Link href="/training" className="hidden rounded-[14px] bg-white/6 px-4 py-3 text-sm font-medium text-white md:inline-flex md:items-center md:gap-2">
           <Plus className="size-4" />
           Novo treino
         </Link>
-        <Link href="/profile" className="rounded-full bg-white/8 px-3 py-2 text-sm font-medium">
-          {sessionUser?.avatar ?? "PS"}
+        <Link href="/profile" className="overflow-hidden rounded-[14px] bg-white/6 p-1.5">
+          {sessionUser?.avatarImage ? (
+            <img src={sessionUser.avatarImage} alt={sessionUser.name ?? "Perfil"} className="size-8 rounded-[10px] object-cover" />
+          ) : (
+            <span className="inline-flex size-8 items-center justify-center rounded-[10px] bg-white/8 text-sm font-medium">
+              {sessionUser?.avatar ?? "PS"}
+            </span>
+          )}
         </Link>
       </div>
     </StrongSurface>
