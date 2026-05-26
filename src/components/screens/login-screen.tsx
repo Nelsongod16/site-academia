@@ -22,16 +22,20 @@ export function LoginScreen() {
 
   useEffect(() => {
     if (sessionUser) {
-      router.replace("/dashboard");
+      window.location.replace("/settings");
     }
-  }, [router, sessionUser]);
+  }, [sessionUser]);
+
+  function enterApp() {
+    window.location.assign("/settings");
+  }
 
   async function handleFirebaseLogin() {
     try {
       setError("");
       const result = await loginWithFirebase(email, password);
       signInFirebaseUser({ uid: result.user.uid, email: result.user.email });
-      router.push("/dashboard");
+      enterApp();
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Nao foi possivel entrar.");
     }
@@ -85,7 +89,7 @@ export function LoginScreen() {
                 onClick={() =>
                   startTransition(() => {
                     signInDemo("user-1");
-                    router.push("/dashboard");
+                    enterApp();
                   })
                 }
                 className="w-full"
@@ -98,7 +102,7 @@ export function LoginScreen() {
               onClick={() =>
                 startTransition(() => {
                   signInDemo("user-2");
-                  router.push("/dashboard");
+                  enterApp();
                 })
               }
               className="w-full"
