@@ -8,7 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   CirclePlus,
-  FolderPlus,
+  GripVertical,
   ImagePlus,
   Link2,
   MoreVertical,
@@ -24,7 +24,7 @@ import { useStore } from "zustand";
 import { Button, Input } from "@/components/ui/kit";
 import { fetchExerciseCatalog } from "@/services/exerciseService";
 import { useAppStore } from "@/store/app-store";
-import type { Exercise, WorkoutExercise } from "@/types/app";
+import type { CustomRoutineConfig, Exercise, RoutineType, RunRoutineConfig, WorkoutExercise } from "@/types/app";
 
 type ScreenMode = "list" | "builder" | "detail";
 
@@ -46,21 +46,126 @@ const emptyCustomExercise: CustomExerciseForm = {
   imageDataUrl: "",
 };
 
+const emptyRunRoutine: RunRoutineConfig = {
+  time: "",
+  kms: "",
+  distance: "",
+  pace: "",
+};
+
+const emptyCustomRoutine: CustomRoutineConfig = {
+  duration: "",
+  focus: "",
+  note: "",
+};
+
 function toTitle(value: string) {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function createEmptySetRow() {
+  return {
+    weight: "",
+    reps: "",
+  };
+}
+
+function ensureSetRows(exercise: WorkoutExercise) {
+  const count = Math.max(1, exercise.sets || 1);
+
+  if (exercise.setRows?.length) {
+    const nextRows = exercise.setRows.slice(0, count);
+
+    while (nextRows.length < count) {
+      nextRows.push(createEmptySetRow());
+    }
+
+    return nextRows;
+  }
+
+  return Array.from({ length: count }, () => ({
+    weight: exercise.weight ?? "",
+    reps: exercise.reps ?? "",
+  }));
+}
+
+function summarizeSetRows(setRows: Array<{ weight: string; reps: string }>) {
+  const weights = Array.from(new Set(setRows.map((row) => row.weight.trim()).filter(Boolean)));
+  const reps = Array.from(new Set(setRows.map((row) => row.reps.trim()).filter(Boolean)));
+
+  return {
+    sets: Math.max(1, setRows.length),
+    weight: weights.length <= 1 ? (weights[0] ?? "") : "variado",
+    reps: reps.length <= 1 ? (reps[0] ?? "") : "variado",
+  };
+}
+
+function normalizeWorkoutExercise(exercise: WorkoutExercise): WorkoutExercise {
+  const setRows = ensureSetRows(exercise);
+  const summary = summarizeSetRows(setRows);
+
+  return {
+    ...exercise,
+    ...summary,
+    setRows,
+    note: exercise.note ?? "",
+    restTimer: exercise.restTimer ?? "Desligado",
+  };
 }
 
 function initialExercise(exerciseId: string): WorkoutExercise {
   return {
     exerciseId,
     sets: 3,
-    reps: "10-12",
-    weight: "carga livre",
+    reps: "",
+    weight: "",
+    note: "",
+    restTimer: "Desligado",
+    setRows: [createEmptySetRow(), createEmptySetRow(), createEmptySetRow()],
   };
 }
 
 function darkFieldClasses() {
-  return "h-12 w-full rounded-[16px] border border-white/10 bg-white/[0.035] px-4 text-sm text-white outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--accent)]/40";
+  return "h-12 w-full rounded-[16px] border border-white/10 bg-white/[0.035] px-4 text-sm text-white outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--accent)]/40 [color-scheme:dark]";
+}
+
+function parseDurationToMinutes(value: string) {
+  const clean = value.trim();
+
+  if (!clean) {
+    return 0;
+  }
+
+  if (/^\d+$/.test(clean)) {
+    return Number(clean);
+  }
+
+  const parts = clean.split(":").map((part) => Number(part));
+
+  if (parts.some((part) => Number.isNaN(part))) {
+    return 0;
+  }
+
+  if (parts.length === 2) {
+    return parts[0] + Math.round(parts[1] / 60);
+  }
+
+  if (parts.length === 3) {
+    return parts[0] * 60 + parts[1] + Math.round(parts[2] / 60);
+  }
+
+  return 0;
+}
+
+function routineTypeLabel(type: RoutineType) {
+  switch (type) {
+    case "run":
+      return "Rotina de corrida";
+    case "custom":
+      return "Personalizado";
+    default:
+      return "Rotina de treino";
+  }
 }
 
 export function TrainingScreen() {
@@ -72,17 +177,24 @@ export function TrainingScreen() {
   const deleteWorkoutRoutine = useStore(useAppStore, (state) => state.deleteWorkoutRoutine);
   const upsertExercises = useStore(useAppStore, (state) => state.upsertExercises);
 
-  const routineWorkouts = useMemo(() => workouts.filter((workout) => workout.kind === "gym"), [workouts]);
+  const routineWorkouts = useMemo(
+    () => workouts.filter((workout) => workout.kind === "gym" || workout.routineType === "run" || workout.routineType === "custom"),
+    [workouts],
+  );
 
   const [mode, setMode] = useState<ScreenMode>("list");
+  const [builderRoutineType, setBuilderRoutineType] = useState<RoutineType>("strength");
   const [selectedRoutineId, setSelectedRoutineId] = useState<string | null>(routineWorkouts[0]?.id ?? null);
   const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
   const [routineTitle, setRoutineTitle] = useState("");
   const [selectedExercises, setSelectedExercises] = useState<WorkoutExercise[]>([]);
+  const [runRoutine, setRunRoutine] = useState<RunRoutineConfig>(emptyRunRoutine);
+  const [customRoutine, setCustomRoutine] = useState<CustomRoutineConfig>(emptyCustomRoutine);
   const [equipmentFilter, setEquipmentFilter] = useState("Todos os equipamentos");
   const [muscleFilter, setMuscleFilter] = useState("Todos os musculos");
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
+  const [routineTypePickerOpen, setRoutineTypePickerOpen] = useState(false);
   const [customModalOpen, setCustomModalOpen] = useState(false);
   const [customExercise, setCustomExercise] = useState<CustomExerciseForm>(emptyCustomExercise);
   const [menuRoutineId, setMenuRoutineId] = useState<string | null>(null);
@@ -111,6 +223,26 @@ export function TrainingScreen() {
     () => routineWorkouts.find((workout) => workout.id === selectedRoutineId) ?? null,
     [routineWorkouts, selectedRoutineId],
   );
+
+  const selectedRoutineType = useMemo(() => {
+    if (!selectedRoutine) {
+      return "strength" as RoutineType;
+    }
+
+    if (selectedRoutine.routineType) {
+      return selectedRoutine.routineType;
+    }
+
+    if (selectedRoutine.kind === "run") {
+      return "run";
+    }
+
+    if (selectedRoutine.kind === "rest") {
+      return "custom";
+    }
+
+    return "strength";
+  }, [selectedRoutine]);
 
   const exerciseMap = useMemo(() => {
     const nextMap = new Map<string, Exercise>();
@@ -208,7 +340,7 @@ export function TrainingScreen() {
   }, [copiedRoutineId]);
 
   useEffect(() => {
-    if (mode !== "builder") {
+    if (mode !== "builder" || builderRoutineType !== "strength") {
       return;
     }
 
@@ -237,7 +369,7 @@ export function TrainingScreen() {
       });
 
     return () => controller.abort();
-  }, [catalogExercises.length, catalogRequestKey, mode]);
+  }, [builderRoutineType, catalogExercises.length, catalogRequestKey, mode]);
 
   function replaceTrainingUrl(routineId?: string) {
     if (typeof window === "undefined") {
@@ -255,21 +387,34 @@ export function TrainingScreen() {
     replaceTrainingUrl(routineId);
   }
 
-  function openBuilder(routineId?: string) {
+  function openBuilder(type: RoutineType, routineId?: string) {
     if (routineId) {
       const routine = routineWorkouts.find((item) => item.id === routineId);
 
       if (routine) {
         setEditingRoutineId(routine.id);
         setRoutineTitle(routine.title);
-        setSelectedExercises(routine.exercises);
+        setSelectedExercises(routine.exercises.map(normalizeWorkoutExercise));
+        setBuilderRoutineType(type);
+        setRunRoutine(routine.runConfig ?? emptyRunRoutine);
+        setCustomRoutine(
+          routine.customConfig ?? {
+            duration: routine.durationMinutes ? String(routine.durationMinutes) : "",
+            focus: routine.muscleGroups.join(", "),
+            note: routine.quickNote ?? "",
+          },
+        );
       }
     } else {
       setEditingRoutineId(null);
       setRoutineTitle("");
       setSelectedExercises([]);
+      setBuilderRoutineType(type);
+      setRunRoutine(emptyRunRoutine);
+      setCustomRoutine(emptyCustomRoutine);
     }
 
+    setRoutineTypePickerOpen(false);
     setMenuRoutineId(null);
     setMode("builder");
     replaceTrainingUrl();
@@ -300,29 +445,116 @@ export function TrainingScreen() {
     );
   }
 
-  function saveRoutine() {
-    const cleanTitle = toTitle(routineTitle);
+  function syncDraftSetRows(exerciseId: string, setRows: Array<{ weight: string; reps: string }>) {
+    const summary = summarizeSetRows(setRows);
 
-    if (!cleanTitle || selectedExercises.length === 0) {
+    updateDraftExercise(exerciseId, {
+      ...summary,
+      setRows,
+    });
+  }
+
+  function updateDraftSetRow(exerciseId: string, rowIndex: number, patch: Partial<{ weight: string; reps: string }>) {
+    const exercise = selectedExercises.find((item) => item.exerciseId === exerciseId);
+    if (!exercise) {
       return;
     }
 
-    const muscleGroups = Array.from(
-      new Set(
-        selectedExercises.flatMap((item) => {
-          const exercise = exerciseMap.get(item.exerciseId);
-          return exercise ? [exercise.muscle, ...exercise.secondaryMuscles.slice(0, 1)] : [];
-        }),
-      ),
-    );
+    const setRows = ensureSetRows(exercise).map((row, index) => (index === rowIndex ? { ...row, ...patch } : row));
+    syncDraftSetRows(exerciseId, setRows);
+  }
 
-    const routineId = saveWorkoutRoutine({
-      id: editingRoutineId ?? undefined,
-      title: cleanTitle,
-      durationMinutes: Math.max(20, selectedExercises.length * 12),
-      muscleGroups,
-      exercises: selectedExercises,
-    });
+  function addDraftSetRow(exerciseId: string) {
+    const exercise = selectedExercises.find((item) => item.exerciseId === exerciseId);
+    if (!exercise) {
+      return;
+    }
+
+    syncDraftSetRows(exerciseId, [...ensureSetRows(exercise), createEmptySetRow()]);
+  }
+
+  function removeDraftSetRow(exerciseId: string, rowIndex: number) {
+    const exercise = selectedExercises.find((item) => item.exerciseId === exerciseId);
+    if (!exercise) {
+      return;
+    }
+
+    const currentRows = ensureSetRows(exercise);
+    if (currentRows.length <= 1) {
+      return;
+    }
+
+    syncDraftSetRows(
+      exerciseId,
+      currentRows.filter((_, index) => index !== rowIndex),
+    );
+  }
+
+  function saveRoutine() {
+    const cleanTitle = toTitle(routineTitle);
+
+    if (!cleanTitle) {
+      return;
+    }
+
+    let routineId = "";
+
+    if (builderRoutineType === "strength") {
+      if (selectedExercises.length === 0) {
+        return;
+      }
+
+      const muscleGroups = Array.from(
+        new Set(
+          selectedExercises.flatMap((item) => {
+            const exercise = exerciseMap.get(item.exerciseId);
+            return exercise ? [exercise.muscle, ...exercise.secondaryMuscles.slice(0, 1)] : [];
+          }),
+        ),
+      );
+
+      routineId = saveWorkoutRoutine({
+        id: editingRoutineId ?? undefined,
+        title: cleanTitle,
+        durationMinutes: Math.max(20, selectedExercises.length * 12),
+        muscleGroups,
+        exercises: selectedExercises.map(normalizeWorkoutExercise),
+        kind: "gym",
+        routineType: "strength",
+      });
+    } else if (builderRoutineType === "run") {
+      const durationMinutes = parseDurationToMinutes(runRoutine.time) || 30;
+
+      routineId = saveWorkoutRoutine({
+        id: editingRoutineId ?? undefined,
+        title: cleanTitle,
+        durationMinutes,
+        muscleGroups: ["cardio", "corrida"],
+        exercises: [],
+        kind: "run",
+        routineType: "run",
+        quickNote: runRoutine.distance || runRoutine.pace ? `${runRoutine.distance || "sem distancia"} | pace ${runRoutine.pace || "livre"}` : "Rotina de corrida personalizada.",
+        runConfig: runRoutine,
+      });
+    } else {
+      const durationMinutes = parseDurationToMinutes(customRoutine.duration) || 30;
+      const muscleGroups = customRoutine.focus
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      routineId = saveWorkoutRoutine({
+        id: editingRoutineId ?? undefined,
+        title: cleanTitle,
+        durationMinutes,
+        muscleGroups: muscleGroups.length ? muscleGroups : ["personalizado"],
+        exercises: [],
+        kind: "rest",
+        routineType: "custom",
+        quickNote: customRoutine.note || "Rotina personalizada criada pelo usuario.",
+        customConfig: customRoutine,
+      });
+    }
 
     setSelectedRoutineId(routineId);
     setMode("detail");
@@ -411,13 +643,45 @@ export function TrainingScreen() {
     setCatalogRequestKey((current) => current + 1);
   }
 
+  function buildRoutineSubtitle(routineId: string) {
+    const routine = routineWorkouts.find((item) => item.id === routineId);
+
+    if (!routine) {
+      return "";
+    }
+
+    const routineType = routine.routineType ?? (routine.kind === "run" ? "run" : routine.kind === "rest" ? "custom" : "strength");
+
+    if (routineType === "run") {
+      return [
+        routine.runConfig?.time && `tempo ${routine.runConfig.time}`,
+        routine.runConfig?.kms && `${routine.runConfig.kms} km`,
+        routine.runConfig?.pace && `pace ${routine.runConfig.pace}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+
+    if (routineType === "custom") {
+      return routine.customConfig?.focus || routine.quickNote || "Rotina livre personalizada.";
+    }
+
+    return routine.exercises
+      .map((item) => exerciseMap.get(item.exerciseId)?.name ?? "Exercicio")
+      .slice(0, 3)
+      .join(", ");
+  }
+
   function renderRoutineCard(routineId: string, title: string, subtitle: string) {
     const menuOpen = menuRoutineId === routineId;
     const copied = copiedRoutineId === routineId;
+    const routine = routineWorkouts.find((item) => item.id === routineId);
+    const type = routine?.routineType ?? (routine?.kind === "run" ? "run" : routine?.kind === "rest" ? "custom" : "strength");
 
     return (
-      <div className="flex items-center gap-3 rounded-[24px] border border-white/8 bg-[#0b1017] px-4 py-4 shadow-[0_12px_30px_rgba(0,0,0,0.22)] transition hover:bg-[#0f1520]">
+      <div className="flex items-center gap-3 rounded-[24px] bg-[#0b1017] px-4 py-4 shadow-[0_12px_30px_rgba(0,0,0,0.22)] transition hover:bg-[#0f1520]">
         <button type="button" onClick={() => openRoutineDetail(routineId)} className="min-w-0 flex-1 text-left">
+          <p className="text-[0.68rem] uppercase tracking-[0.18em] text-[var(--muted)]">{routineTypeLabel(type)}</p>
           <p className="truncate text-[1.35rem] font-semibold tracking-[-0.05em] text-white">{title}</p>
           <p className="mt-1.5 truncate text-sm text-[var(--muted)]">{subtitle}</p>
         </button>
@@ -441,7 +705,7 @@ export function TrainingScreen() {
             >
               <button
                 type="button"
-                onClick={() => openBuilder(routineId)}
+                onClick={() => openBuilder(type, routineId)}
                 className="flex w-full items-center gap-3 rounded-[12px] px-3 py-3 text-left text-sm text-white transition hover:bg-white/6"
               >
                 <PencilLine className="size-4 text-[var(--accent)]" />
@@ -471,7 +735,7 @@ export function TrainingScreen() {
   }
 
   return (
-    <section className="rounded-[34px] border border-white/8 bg-[linear-gradient(180deg,#0b1017_0%,#090c12_100%)] px-4 py-5 text-white shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:px-6 lg:px-7">
+    <section className="rounded-[34px] bg-[linear-gradient(180deg,#0b1017_0%,#090c12_100%)] px-4 py-5 text-white shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:px-6 lg:px-7">
       {mode === "list" ? (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.78fr)]">
           <div>
@@ -485,10 +749,7 @@ export function TrainingScreen() {
                 renderRoutineCard(
                   routine.id,
                   routine.title.toLowerCase(),
-                  routine.exercises
-                    .map((item) => exerciseMap.get(item.exerciseId)?.name ?? "Exercicio")
-                    .slice(0, 3)
-                    .join(", "),
+                  buildRoutineSubtitle(routine.id),
                 ),
               )}
             </div>
@@ -497,27 +758,17 @@ export function TrainingScreen() {
           <div className="space-y-4">
             <button
               type="button"
-              onClick={() => openBuilder()}
-              className="flex w-full items-center justify-between rounded-[24px] border border-white/8 bg-[#0b1017] px-5 py-6 text-left shadow-[0_12px_30px_rgba(0,0,0,0.24)] transition hover:bg-[#0f1520]"
+              onClick={() => setRoutineTypePickerOpen(true)}
+              className="flex w-full items-center justify-between rounded-[24px] bg-[#0b1017] px-5 py-6 text-left shadow-[0_12px_30px_rgba(0,0,0,0.24)] transition hover:bg-[#0f1520]"
             >
               <div className="flex items-center gap-4">
                 <div className="grid size-12 place-items-center rounded-[16px] bg-white/6">
                   <NotebookPen className="size-5 text-[var(--accent)]" />
                 </div>
-                <span className="text-[1.45rem] font-medium tracking-[-0.04em]">Nova rotina</span>
+                <span className="text-[1.45rem] font-medium tracking-[-0.04em]">Adicionar rotina</span>
               </div>
               <ChevronRight className="size-5 text-[var(--muted)]" />
             </button>
-
-            <div className="flex w-full items-center justify-between rounded-[24px] border border-white/8 bg-[#0b1017] px-5 py-6 text-left shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
-              <div className="flex items-center gap-4">
-                <div className="grid size-12 place-items-center rounded-[16px] bg-white/6">
-                  <FolderPlus className="size-5 text-[var(--sky)]" />
-                </div>
-                <span className="text-[1.45rem] font-medium tracking-[-0.04em]">Nova pasta</span>
-              </div>
-              <ChevronRight className="size-5 text-[var(--muted)]" />
-            </div>
           </div>
         </div>
       ) : null}
@@ -535,12 +786,20 @@ export function TrainingScreen() {
                 className="inline-flex items-center gap-3 text-[1.55rem] font-semibold tracking-[-0.045em]"
               >
                 <ArrowLeft className="size-5" />
-                {editingRoutineId ? "Editar rotina" : "Criar rotina"}
+                {editingRoutineId ? `Editar ${routineTypeLabel(builderRoutineType).toLowerCase()}` : routineTypeLabel(builderRoutineType)}
               </button>
               <Button
                 onClick={saveRoutine}
                 className="h-11 rounded-[14px] bg-[var(--accent)] px-5 text-sm font-medium text-black hover:brightness-95"
-                disabled={!routineTitle.trim() || selectedExercises.length === 0}
+                disabled={
+                  !routineTitle.trim() ||
+                  (builderRoutineType === "strength" && selectedExercises.length === 0) ||
+                  (builderRoutineType === "run" &&
+                    !runRoutine.time.trim() &&
+                    !runRoutine.kms.trim() &&
+                    !runRoutine.distance.trim() &&
+                    !runRoutine.pace.trim())
+                }
               >
                 Guardar rotina
               </Button>
@@ -551,13 +810,19 @@ export function TrainingScreen() {
               <input
                 value={routineTitle}
                 onChange={(event) => setRoutineTitle(event.target.value)}
-                placeholder="Titulo da rotina de treino"
+                placeholder={
+                  builderRoutineType === "run"
+                    ? "Ex: Corrida progressiva de quinta"
+                    : builderRoutineType === "custom"
+                      ? "Ex: Rotina livre de mobilidade"
+                      : "Titulo da rotina de treino"
+                }
                 className={`${darkFieldClasses()} mt-2.5 h-12 text-[0.95rem]`}
               />
             </div>
 
             <div className="mt-5 min-h-[400px] rounded-[28px] border border-white/8 bg-[#0b1017] p-5 shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
-              {selectedExercises.length === 0 ? (
+              {builderRoutineType === "strength" && selectedExercises.length === 0 ? (
                 <div className="flex h-full min-h-[320px] flex-col items-center justify-center text-center">
                   <div className="grid size-14 place-items-center rounded-full bg-white/6 text-[var(--muted)]">
                     <NotebookPen className="size-7" />
@@ -567,50 +832,196 @@ export function TrainingScreen() {
                     Escolha os exercicios da biblioteca ao lado para montar sua rotina.
                   </p>
                 </div>
-              ) : (
-                <div className="grid gap-4 xl:grid-cols-2">
+              ) : builderRoutineType === "strength" ? (
+                <div className="space-y-5">
                   {selectedExercises.map((item) => {
                     const exercise = exerciseMap.get(item.exerciseId);
                     if (!exercise) {
                       return null;
                     }
 
+                    const setRows = ensureSetRows(item);
+
                     return (
-                      <div key={item.exerciseId} className="rounded-[22px] border border-white/8 bg-white/[0.02] p-4">
-                        <div className="flex items-start gap-4">
-                          <img src={exercise.mediaUrl} alt={exercise.name} className="size-16 rounded-[18px] object-cover" />
+                      <div key={item.exerciseId} className="rounded-[22px] border border-white/8 bg-white/[0.02] p-5">
+                        <div className="flex items-start gap-3">
+                          <button type="button" className="mt-1 text-[var(--muted)]" aria-label="Reordenar exercicio">
+                            <GripVertical className="size-4" />
+                          </button>
+                          <img src={exercise.mediaUrl} alt={exercise.name} className="size-14 rounded-full object-cover" />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[0.98rem] font-semibold tracking-[-0.03em]">{exercise.name}</p>
-                            <p className="mt-1 text-sm capitalize text-[var(--muted)]">{exercise.muscle}</p>
+                            <p className="truncate text-[1.02rem] font-semibold tracking-[-0.03em]">{exercise.name}</p>
                           </div>
-                          <button type="button" onClick={() => removeExerciseFromDraft(item.exerciseId)} className="mt-0.5 text-[#ff8a8a]">
-                            <Trash2 className="size-4" />
+                          <button
+                            type="button"
+                            onClick={() => removeExerciseFromDraft(item.exerciseId)}
+                            className="mt-0.5 text-[var(--muted)] transition hover:text-white"
+                            aria-label="Remover exercicio"
+                          >
+                            <MoreVertical className="size-4" />
                           </button>
                         </div>
 
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                          <input
-                            value={String(item.sets)}
-                            onChange={(event) => updateDraftExercise(item.exerciseId, { sets: Number(event.target.value || 0) })}
-                            placeholder="Series"
-                            className={darkFieldClasses()}
+                        <div className="mt-5">
+                          <p className="text-[0.78rem] font-medium text-white/84">Nota</p>
+                          <textarea
+                            value={item.note ?? ""}
+                            onChange={(event) => updateDraftExercise(item.exerciseId, { note: event.target.value })}
+                            placeholder="Adicionar nota afixada"
+                            rows={2}
+                            className="mt-2 w-full rounded-[14px] border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--accent)]/40"
                           />
-                          <input
-                            value={item.reps}
-                            onChange={(event) => updateDraftExercise(item.exerciseId, { reps: event.target.value })}
-                            placeholder="Reps"
-                            className={darkFieldClasses()}
-                          />
-                          <input
-                            value={item.weight}
-                            onChange={(event) => updateDraftExercise(item.exerciseId, { weight: event.target.value })}
-                            placeholder="Carga"
-                            className={darkFieldClasses()}
-                          />
+                        </div>
+
+                        <div className="mt-4">
+                          <p className="text-[0.78rem] font-medium text-white/84">Temporizador de descanso</p>
+                          <select
+                            value={item.restTimer ?? "Desligado"}
+                            onChange={(event) => updateDraftExercise(item.exerciseId, { restTimer: event.target.value })}
+                            className={`${darkFieldClasses()} mt-2 max-w-[220px] pr-10`}
+                          >
+                            {["Desligado", "30s", "45s", "60s", "90s", "120s"].map((option) => (
+                              <option key={option} value={option} className="bg-[#0f141c] text-white">
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="mt-5 grid grid-cols-[72px_minmax(0,1fr)_minmax(0,1fr)_32px] gap-3">
+                          <p className="text-[0.68rem] uppercase tracking-[0.14em] text-[var(--muted)]">Serie</p>
+                          <p className="text-[0.68rem] uppercase tracking-[0.14em] text-[var(--muted)]">Kg</p>
+                          <p className="text-[0.68rem] uppercase tracking-[0.14em] text-[var(--muted)]">Reps</p>
+                          <div />
+
+                          {setRows.map((row, rowIndex) => (
+                            <div
+                              key={`${item.exerciseId}-${rowIndex}`}
+                              className="col-span-4 grid grid-cols-[72px_minmax(0,1fr)_minmax(0,1fr)_32px] items-center gap-3 rounded-[14px] bg-white/[0.035] px-3 py-2"
+                            >
+                              <div className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-white/10 bg-[#0b1017] text-base font-medium text-white">
+                                {rowIndex + 1}
+                              </div>
+                              <input
+                                value={row.weight}
+                                onChange={(event) => updateDraftSetRow(item.exerciseId, rowIndex, { weight: event.target.value })}
+                                className={`${darkFieldClasses()} h-11 bg-[#0b1017] text-[0.95rem]`}
+                              />
+                              <input
+                                value={row.reps}
+                                onChange={(event) => updateDraftSetRow(item.exerciseId, rowIndex, { reps: event.target.value })}
+                                className={`${darkFieldClasses()} h-11 bg-[#0b1017] text-[0.95rem]`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeDraftSetRow(item.exerciseId, rowIndex)}
+                                className="text-lg text-[var(--muted)] transition hover:text-white"
+                                aria-label={`Remover serie ${rowIndex + 1}`}
+                              >
+                                x
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mt-4">
+                          <button
+                            type="button"
+                            onClick={() => addDraftSetRow(item.exerciseId)}
+                            className="flex h-12 w-full items-center justify-center gap-2 rounded-[14px] border border-white/8 bg-white/[0.035] text-[0.98rem] font-medium text-white transition hover:bg-white/[0.06]"
+                          >
+                            <CirclePlus className="size-4" />
+                            Adicionar serie
+                          </button>
                         </div>
                       </div>
                     );
                   })}
+                </div>
+              ) : builderRoutineType === "run" ? (
+                <div>
+                  <p className="text-[1.02rem] font-semibold tracking-[-0.03em]">Detalhes da corrida</p>
+                  <p className="mt-2 text-sm leading-7 text-[var(--muted)]">
+                    Defina os dados principais da rotina de corrida para salvar um bloco pronto e reutilizavel.
+                  </p>
+
+                  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Tempo</p>
+                      <input
+                        value={runRoutine.time}
+                        onChange={(event) => setRunRoutine((current) => ({ ...current, time: event.target.value }))}
+                        placeholder="Ex: 45:00"
+                        className={`${darkFieldClasses()} mt-2.5`}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">KMs</p>
+                      <input
+                        value={runRoutine.kms}
+                        onChange={(event) => setRunRoutine((current) => ({ ...current, kms: event.target.value }))}
+                        placeholder="Ex: 8"
+                        className={`${darkFieldClasses()} mt-2.5`}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Distancia</p>
+                      <input
+                        value={runRoutine.distance}
+                        onChange={(event) => setRunRoutine((current) => ({ ...current, distance: event.target.value }))}
+                        placeholder="Ex: 8000 m"
+                        className={`${darkFieldClasses()} mt-2.5`}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Pace</p>
+                      <input
+                        value={runRoutine.pace}
+                        onChange={(event) => setRunRoutine((current) => ({ ...current, pace: event.target.value }))}
+                        placeholder="Ex: 5:20/km"
+                        className={`${darkFieldClasses()} mt-2.5`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-[1.02rem] font-semibold tracking-[-0.03em]">Bloco personalizado</p>
+                  <p className="mt-2 text-sm leading-7 text-[var(--muted)]">
+                    Use este formato para rotinas livres, mobilidade, recuperacao ou protocolos que nao dependem da biblioteca de exercicios.
+                  </p>
+
+                  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Duracao</p>
+                      <input
+                        value={customRoutine.duration}
+                        onChange={(event) => setCustomRoutine((current) => ({ ...current, duration: event.target.value }))}
+                        placeholder="Ex: 30"
+                        className={`${darkFieldClasses()} mt-2.5`}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Foco</p>
+                      <input
+                        value={customRoutine.focus}
+                        onChange={(event) => setCustomRoutine((current) => ({ ...current, focus: event.target.value }))}
+                        placeholder="Ex: mobilidade, core"
+                        className={`${darkFieldClasses()} mt-2.5`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-[0.82rem] font-medium text-[var(--muted)]">Observacoes</p>
+                    <textarea
+                      value={customRoutine.note}
+                      onChange={(event) => setCustomRoutine((current) => ({ ...current, note: event.target.value }))}
+                      placeholder="Descreva o que precisa acontecer nessa rotina."
+                      rows={6}
+                      className="mt-2.5 w-full rounded-[16px] border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--accent)]/40"
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -623,12 +1034,28 @@ export function TrainingScreen() {
                   <p className="text-[1rem] font-semibold tracking-[-0.03em]">Resumo</p>
                   <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-3.5">
-                      <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Exercicios</p>
-                      <p className="mt-1.5 text-[1.85rem] leading-none">{selectedExercises.length}</p>
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
+                        {builderRoutineType === "strength" ? "Exercicios" : builderRoutineType === "run" ? "Tempo" : "Duracao"}
+                      </p>
+                      <p className="mt-1.5 text-[1.85rem] leading-none">
+                        {builderRoutineType === "strength"
+                          ? selectedExercises.length
+                          : builderRoutineType === "run"
+                            ? runRoutine.time || "--"
+                            : customRoutine.duration || "--"}
+                      </p>
                     </div>
                     <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-3.5">
-                      <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Series</p>
-                      <p className="mt-1.5 text-[1.85rem] leading-none">{selectedExercises.reduce((total, item) => total + item.sets, 0)}</p>
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
+                        {builderRoutineType === "strength" ? "Series" : builderRoutineType === "run" ? "Pace" : "Foco"}
+                      </p>
+                      <p className="mt-1.5 text-[1.2rem] leading-none">
+                        {builderRoutineType === "strength"
+                          ? selectedExercises.reduce((total, item) => total + item.sets, 0)
+                          : builderRoutineType === "run"
+                            ? runRoutine.pace || "--"
+                            : customRoutine.focus || "--"}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -638,6 +1065,7 @@ export function TrainingScreen() {
               </div>
             </div>
 
+            {builderRoutineType === "strength" ? (
             <div className="rounded-[24px] border border-white/8 bg-[#0b1017] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[1rem] font-semibold tracking-[-0.03em]">Biblioteca</p>
@@ -653,14 +1081,14 @@ export function TrainingScreen() {
 
               <select value={equipmentFilter} onChange={(event) => setEquipmentFilter(event.target.value)} className={`${darkFieldClasses()} mt-4 pr-10`}>
                 {allEquipments.map((item) => (
-                  <option key={item} value={item}>
+                  <option key={item} value={item} className="bg-[#0f141c] text-white">
                     {item}
                   </option>
                 ))}
               </select>
               <select value={muscleFilter} onChange={(event) => setMuscleFilter(event.target.value)} className={`${darkFieldClasses()} mt-3 pr-10`}>
                 {allMuscles.map((item) => (
-                  <option key={item} value={item}>
+                  <option key={item} value={item} className="bg-[#0f141c] text-white">
                     {item}
                   </option>
                 ))}
@@ -732,6 +1160,38 @@ export function TrainingScreen() {
                 </div>
               ) : null}
             </div>
+            ) : (
+              <div className="rounded-[24px] border border-white/8 bg-[#0b1017] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
+                <p className="text-[1rem] font-semibold tracking-[-0.03em]">
+                  {builderRoutineType === "run" ? "Preview da corrida" : "Preview do bloco"}
+                </p>
+                <p className="mt-2 text-sm leading-7 text-[var(--muted)]">
+                  {builderRoutineType === "run"
+                    ? "Salve um molde de corrida com os numeros principais para reutilizar quando quiser."
+                    : "Salve um bloco livre com observacoes, foco e duracao para encaixar na semana."}
+                </p>
+
+                <div className="mt-4 rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
+                  {builderRoutineType === "run" ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-[16px] bg-black/20 px-3 py-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">KMs</p>
+                        <p className="mt-1 text-lg font-semibold">{runRoutine.kms || "--"}</p>
+                      </div>
+                      <div className="rounded-[16px] bg-black/20 px-3 py-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Distancia</p>
+                        <p className="mt-1 text-lg font-semibold">{runRoutine.distance || "--"}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Observacoes</p>
+                      <p className="mt-2 text-sm leading-7 text-white/84">{customRoutine.note || "Nenhuma observacao definida ainda."}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
@@ -752,40 +1212,63 @@ export function TrainingScreen() {
             </button>
 
             <div className="mt-6 rounded-[28px] border border-white/8 bg-[#0b1017] p-5 shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
-              <div className="grid gap-4 lg:grid-cols-2">
-                {selectedRoutine.exercises.map((item) => {
-                  const exercise = exerciseMap.get(item.exerciseId);
-                  if (!exercise) {
-                    return null;
-                  }
+              {selectedRoutineType === "strength" ? (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {selectedRoutine.exercises.map((item) => {
+                    const exercise = exerciseMap.get(item.exerciseId);
+                    if (!exercise) {
+                      return null;
+                    }
 
-                  return (
-                    <div key={item.exerciseId} className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                      <div className="flex items-center gap-4">
-                        <img src={exercise.mediaUrl} alt={exercise.name} className="size-16 rounded-[18px] object-cover" />
-                        <div className="min-w-0">
-                          <p className="truncate text-lg font-semibold tracking-[-0.04em]">{exercise.name}</p>
-                          <p className="mt-1 text-sm capitalize text-[var(--muted)]">{exercise.muscle}</p>
+                    return (
+                      <div key={item.exerciseId} className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+                        <div className="flex items-center gap-4">
+                          <img src={exercise.mediaUrl} alt={exercise.name} className="size-16 rounded-[18px] object-cover" />
+                          <div className="min-w-0">
+                            <p className="truncate text-lg font-semibold tracking-[-0.04em]">{exercise.name}</p>
+                            <p className="mt-1 text-sm capitalize text-[var(--muted)]">{exercise.muscle}</p>
+                          </div>
+                        </div>
+                        <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                          <div className="rounded-[16px] border border-white/8 bg-black/20 px-3 py-3">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">Series</p>
+                            <p className="mt-1 text-lg font-semibold">{item.sets}</p>
+                          </div>
+                          <div className="rounded-[16px] border border-white/8 bg-black/20 px-3 py-3">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">Reps</p>
+                            <p className="mt-1 text-lg font-semibold">{item.reps}</p>
+                          </div>
+                          <div className="rounded-[16px] border border-white/8 bg-black/20 px-3 py-3">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">Carga</p>
+                            <p className="mt-1 text-lg font-semibold">{item.weight}</p>
+                          </div>
                         </div>
                       </div>
-                      <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-                        <div className="rounded-[16px] border border-white/8 bg-black/20 px-3 py-3">
-                          <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">Series</p>
-                          <p className="mt-1 text-lg font-semibold">{item.sets}</p>
-                        </div>
-                        <div className="rounded-[16px] border border-white/8 bg-black/20 px-3 py-3">
-                          <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">Reps</p>
-                          <p className="mt-1 text-lg font-semibold">{item.reps}</p>
-                        </div>
-                        <div className="rounded-[16px] border border-white/8 bg-black/20 px-3 py-3">
-                          <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">Carga</p>
-                          <p className="mt-1 text-lg font-semibold">{item.weight}</p>
-                        </div>
-                      </div>
+                    );
+                  })}
+                </div>
+              ) : selectedRoutineType === "run" ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {[
+                    ["Tempo", selectedRoutine.runConfig?.time || "--"],
+                    ["KMs", selectedRoutine.runConfig?.kms || "--"],
+                    ["Distancia", selectedRoutine.runConfig?.distance || "--"],
+                    ["Pace", selectedRoutine.runConfig?.pace || "--"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">{label}</p>
+                      <p className="mt-3 text-[1.4rem] font-semibold tracking-[-0.04em] text-white">{value}</p>
                     </div>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-5">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">Observacoes</p>
+                  <p className="mt-3 text-sm leading-7 text-white/84">
+                    {selectedRoutine.customConfig?.note || selectedRoutine.quickNote || "Rotina personalizada sem observacoes adicionais."}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -806,7 +1289,10 @@ export function TrainingScreen() {
                   </p>
                 </div>
               </div>
-              <Button onClick={() => openBuilder(selectedRoutine.id)} className="mt-5 w-full rounded-[14px] bg-[var(--accent)] text-black hover:brightness-95">
+              <Button
+                onClick={() => openBuilder(selectedRoutineType, selectedRoutine.id)}
+                className="mt-5 w-full rounded-[14px] bg-[var(--accent)] text-black hover:brightness-95"
+              >
                 Editar rotina
               </Button>
               <Button variant="secondary" onClick={() => void copyRoutineLink(selectedRoutine.id)} className="mt-3 w-full rounded-[14px]">
@@ -826,12 +1312,28 @@ export function TrainingScreen() {
 
               <div className="mt-5 grid grid-cols-3 gap-3 text-sm">
                 <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">Exercicios</p>
-                  <p className="mt-2 text-2xl">{selectedRoutine.exercises.length}</p>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">
+                    {selectedRoutineType === "strength" ? "Exercicios" : selectedRoutineType === "run" ? "KMs" : "Foco"}
+                  </p>
+                  <p className="mt-2 text-2xl">
+                    {selectedRoutineType === "strength"
+                      ? selectedRoutine.exercises.length
+                      : selectedRoutineType === "run"
+                        ? selectedRoutine.runConfig?.kms || "--"
+                        : selectedRoutine.customConfig?.focus || "--"}
+                  </p>
                 </div>
                 <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">Series</p>
-                  <p className="mt-2 text-2xl">{selectedRoutine.exercises.reduce((total, item) => total + item.sets, 0)}</p>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">
+                    {selectedRoutineType === "strength" ? "Series" : selectedRoutineType === "run" ? "Pace" : "Tipo"}
+                  </p>
+                  <p className="mt-2 text-2xl">
+                    {selectedRoutineType === "strength"
+                      ? selectedRoutine.exercises.reduce((total, item) => total + item.sets, 0)
+                      : selectedRoutineType === "run"
+                        ? selectedRoutine.runConfig?.pace || "--"
+                        : "Livre"}
+                  </p>
                 </div>
                 <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
                   <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">Duracao</p>
@@ -839,22 +1341,76 @@ export function TrainingScreen() {
                 </div>
               </div>
 
-              <div className="mt-5 rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
-                {selectedRoutine.muscleGroups.slice(0, 4).map((muscle, index) => (
-                  <div key={muscle} className="mt-4 first:mt-0">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="capitalize text-white/84">{muscle}</span>
-                      <span className="text-[var(--muted)]">{Math.max(1, selectedRoutine.exercises.length - index)}</span>
+              {selectedRoutine.muscleGroups.length ? (
+                <div className="mt-5 rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
+                  {selectedRoutine.muscleGroups.slice(0, 4).map((muscle, index) => (
+                    <div key={muscle} className="mt-4 first:mt-0">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="capitalize text-white/84">{muscle}</span>
+                        <span className="text-[var(--muted)]">
+                          {selectedRoutineType === "strength" ? Math.max(1, selectedRoutine.exercises.length - index) : index === 0 ? "foco" : "extra"}
+                        </span>
+                      </div>
+                      <div className="mt-2 h-3 rounded-full bg-white/8">
+                        <div
+                          className="h-3 rounded-full bg-[var(--accent)]"
+                          style={{ width: `${Math.max(35, 100 - index * 20)}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="mt-2 h-3 rounded-full bg-white/8">
-                      <div
-                        className="h-3 rounded-full bg-[var(--accent)]"
-                        style={{ width: `${Math.max(35, 100 - index * 20)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {routineTypePickerOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xl">
+          <div className="w-full max-w-3xl rounded-[28px] border border-white/10 bg-[#0b1017] p-6 text-white shadow-[0_24px_80px_rgba(0,0,0,0.36)]">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--muted)]">novo bloco</p>
+                <h2 className="mt-2 text-[1.9rem] font-semibold tracking-[-0.05em]">Escolha o tipo de rotina</h2>
               </div>
+              <button
+                type="button"
+                onClick={() => setRoutineTypePickerOpen(false)}
+                className="flex size-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[var(--muted)]"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              {[
+                {
+                  type: "strength" as RoutineType,
+                  title: "Rotina de treino",
+                  body: "Monte um bloco com exercicios, series, reps, carga e descanso.",
+                },
+                {
+                  type: "run" as RoutineType,
+                  title: "Rotina de corrida",
+                  body: "Salve tempo, kms, distancia e pace para repetir a sessao depois.",
+                },
+                {
+                  type: "custom" as RoutineType,
+                  title: "Personalizado",
+                  body: "Crie um bloco livre para mobilidade, recovery, core ou protocolos proprios.",
+                },
+              ].map((option) => (
+                <button
+                  key={option.type}
+                  type="button"
+                  onClick={() => openBuilder(option.type)}
+                  className="rounded-[24px] border border-white/8 bg-white/[0.03] p-5 text-left transition hover:border-[var(--accent)]/35 hover:bg-white/[0.05]"
+                >
+                  <p className="text-[1.1rem] font-semibold tracking-[-0.03em] text-white">{option.title}</p>
+                  <p className="mt-3 text-sm leading-7 text-[var(--muted)]">{option.body}</p>
+                </button>
+              ))}
             </div>
           </div>
         </div>

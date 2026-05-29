@@ -3,6 +3,7 @@ import type { SocialSex, SocialVisibility } from "@/types/social";
 export type TrainingTag = "forca" | "hipertrofia" | "cardio" | "resistencia";
 export type ExerciseDifficulty = "iniciante" | "intermediario" | "avancado";
 export type WorkoutKind = "gym" | "run" | "swim" | "rest";
+export type RoutineType = "strength" | "run" | "custom";
 
 export interface SessionUser {
   id: string;
@@ -127,6 +128,24 @@ export interface WorkoutExercise {
   reps: string;
   weight: string;
   note?: string;
+  restTimer?: string;
+  setRows?: Array<{
+    weight: string;
+    reps: string;
+  }>;
+}
+
+export interface RunRoutineConfig {
+  time: string;
+  kms: string;
+  distance: string;
+  pace: string;
+}
+
+export interface CustomRoutineConfig {
+  duration: string;
+  focus: string;
+  note: string;
 }
 
 export interface WorkoutDay {
@@ -142,6 +161,9 @@ export interface WorkoutDay {
   muscleGroups: string[];
   quickNote?: string;
   exercises: WorkoutExercise[];
+  routineType?: RoutineType;
+  runConfig?: RunRoutineConfig;
+  customConfig?: CustomRoutineConfig;
 }
 
 export interface RunEntry {

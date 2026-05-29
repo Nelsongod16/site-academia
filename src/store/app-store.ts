@@ -5,7 +5,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { commentsSeed, communityProfiles, demoUsers, exerciseLibrary, feedSeed, photoSeed, runSeed, swimSeed, workoutsSeed } from "@/lib/demo-data";
 import { isoNow } from "@/lib/utils";
-import type { Exercise, FeedPost, SessionUser, SharedSnapshot, WorkoutExercise, WorkoutKind } from "@/types/app";
+import type { CustomRoutineConfig, Exercise, FeedPost, RunRoutineConfig, RoutineType, SessionUser, SharedSnapshot, WorkoutExercise, WorkoutKind } from "@/types/app";
 
 type ConnectionHint = "online" | "offline" | "syncing" | "saved";
 
@@ -65,6 +65,11 @@ interface AppState extends SharedSnapshot {
     durationMinutes: number;
     muscleGroups: string[];
     exercises: WorkoutExercise[];
+    kind?: WorkoutKind;
+    routineType?: RoutineType;
+    quickNote?: string;
+    runConfig?: RunRoutineConfig;
+    customConfig?: CustomRoutineConfig;
   }) => string;
   reorderWorkoutExercises: (workoutId: string, ordered: string[]) => void;
   updateWorkoutExercise: (workoutId: string, exerciseId: string, patch: Partial<WorkoutExercise>) => void;
@@ -312,23 +317,40 @@ export const useAppStore = create<AppState>()(
             connectionHint: "saved",
           };
         }),
-      saveWorkoutRoutine: ({ id, title, durationMinutes, muscleGroups, exercises }) => {
+      saveWorkoutRoutine: ({ id, title, durationMinutes, muscleGroups, exercises, kind = "gym", routineType = "strength", quickNote, runConfig, customConfig }) => {
         const routineId = id ?? crypto.randomUUID();
 
         set((state) => {
+          const colorMap: Record<WorkoutKind, string> = {
+            gym: "#9CFF79",
+            run: "#4FD1FF",
+            swim: "#76B8FF",
+            rest: "#C9A7FF",
+          };
+
+          const tagsMap: Record<WorkoutKind, AppState["workouts"][number]["tags"]> = {
+            gym: ["hipertrofia"],
+            run: ["cardio", "resistencia"],
+            swim: ["resistencia"],
+            rest: ["resistencia"],
+          };
+
           const nextWorkout: AppState["workouts"][number] = {
             id: routineId,
             label: title.trim().slice(0, 3) || `R${state.workouts.length + 1}`,
             date: isoNow(),
-            kind: "gym" as const,
+            kind,
             title: title.trim(),
-            color: "#9CFF79",
+            color: colorMap[kind],
             completed: false,
             durationMinutes,
-            tags: ["hipertrofia"],
+            tags: tagsMap[kind],
             muscleGroups,
-            quickNote: "Rotina personalizada criada na biblioteca de treinos.",
+            quickNote: quickNote ?? "Rotina personalizada criada na biblioteca de treinos.",
             exercises,
+            routineType,
+            runConfig,
+            customConfig,
           };
 
           return {

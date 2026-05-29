@@ -74,11 +74,18 @@ export function DesktopSideNav() {
                 key={href}
                 href={href}
                 className={cn(
-                  "flex h-13 items-center gap-3 rounded-[18px] px-3 transition",
-                  active ? "bg-white text-black" : "text-[var(--muted)] hover:bg-white/[0.06] hover:text-white",
+                  "flex h-13 items-center justify-center gap-3 rounded-[18px] px-3 transition group-hover:justify-start",
+                  active
+                    ? "border border-[var(--accent)]/45 bg-[rgba(156,255,121,0.10)] text-white shadow-[0_10px_24px_rgba(156,255,121,0.10)]"
+                    : "text-[var(--muted)] hover:bg-white/[0.06] hover:text-white",
                 )}
               >
-                <span className="flex size-6 shrink-0 items-center justify-center">
+                <span
+                  className={cn(
+                    "flex size-6 shrink-0 items-center justify-center",
+                    active ? "text-[var(--accent)]" : "",
+                  )}
+                >
                   <Icon className="size-4" />
                 </span>
                 <span className="whitespace-nowrap text-sm font-medium opacity-0 transition duration-200 group-hover:opacity-100">
@@ -92,7 +99,7 @@ export function DesktopSideNav() {
         <button
           type="button"
           onClick={() => void handleSignOut()}
-          className="mt-4 flex h-13 items-center gap-3 rounded-[18px] px-3 text-[#ff9d9d] transition hover:bg-white/[0.06]"
+          className="mt-4 flex h-13 items-center justify-center gap-3 rounded-[18px] px-3 text-[#ff9d9d] transition hover:bg-white/[0.06] group-hover:justify-start"
         >
           <span className="flex size-6 shrink-0 items-center justify-center">
             <LogOut className="size-4" />
