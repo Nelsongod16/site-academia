@@ -5,6 +5,7 @@ import { Heart, MailCheck, MessageCircle, PencilLine, UploadCloud, X } from "luc
 import { useStore } from "zustand";
 
 import { PageFrame } from "@/components/layout/page-frame";
+import { RunPostMetrics } from "@/components/social/run-post-metrics";
 import { SocialPostCard } from "@/components/social/social-post-card";
 import { Button, Chip, Input, SectionHeading, StrongSurface, Surface, Textarea } from "@/components/ui/kit";
 import { useCurrentSocialState, useSocialDirectory, useSocialFeed } from "@/hooks/use-social-session";
@@ -14,10 +15,17 @@ import { createSocialPost, uploadPostImage } from "@/lib/firebase/social";
 import { compressImage } from "@/lib/media";
 import { canViewUserContent, relationshipForProfile } from "@/lib/social-utils";
 import { useAppStore } from "@/store/app-store";
-import type { SocialPost } from "@/types/social";
+import type { RunPostMetrics as RunPostMetricsShape, SocialPost } from "@/types/social";
 
-const postTypeOptions: SocialPost["postType"][] = ["workout", "run", "evolution", "pr", "achievement"];
 const visibilityOptions: SocialPost["visibility"][] = ["public", "friends", "private"];
+
+function emptyRunDetails(): Required<RunPostMetricsShape> {
+  return {
+    runTime: "",
+    runDistance: "",
+    runPace: "",
+  };
+}
 
 export function FeedScreen() {
   const socialReady = hasFirebaseConfig();
@@ -32,7 +40,8 @@ export function FeedScreen() {
 
   const [caption, setCaption] = useState("");
   const [location, setLocation] = useState("");
-  const [postType, setPostType] = useState<SocialPost["postType"]>("workout");
+  const [isRunPost, setIsRunPost] = useState(false);
+  const [runDetails, setRunDetails] = useState<Required<RunPostMetricsShape>>(emptyRunDetails);
   const [visibility, setVisibility] = useState<SocialPost["visibility"]>("public");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [composerError, setComposerError] = useState("");
@@ -97,14 +106,20 @@ export function FeedScreen() {
     setCaption("");
     setLocation("");
     setSelectedFile(null);
+    setIsRunPost(false);
+    setRunDetails(emptyRunDetails());
     setVisibility("public");
-    setPostType("workout");
     setComposerError("");
   }
 
   async function handlePublish() {
     if (!sessionUser || !profile || !selectedFile || !caption.trim()) {
       setComposerError("Selecione uma imagem e escreva uma legenda para publicar.");
+      return;
+    }
+
+    if (isRunPost && (!runDetails.runTime.trim() || !runDetails.runDistance.trim() || !runDetails.runPace.trim())) {
+      setComposerError("Preencha tempo, distancia e pace para publicar a corrida.");
       return;
     }
 
@@ -120,7 +135,10 @@ export function FeedScreen() {
         userId: sessionUser.id,
         caption,
         imageUrl,
-        postType,
+        postType: isRunPost ? "run" : "workout",
+        runTime: isRunPost ? runDetails.runTime : undefined,
+        runDistance: isRunPost ? runDetails.runDistance : undefined,
+        runPace: isRunPost ? runDetails.runPace : undefined,
         location,
         visibility,
       });
@@ -140,6 +158,11 @@ export function FeedScreen() {
       return;
     }
 
+    if (isRunPost && (!runDetails.runTime.trim() || !runDetails.runDistance.trim() || !runDetails.runPace.trim())) {
+      setComposerError("Preencha tempo, distancia e pace para publicar a corrida.");
+      return;
+    }
+
     setComposerError("");
     setPublishing(true);
 
@@ -148,9 +171,18 @@ export function FeedScreen() {
       addLocalFeedPost({
         caption,
         image,
-        activityLabel: location.trim() ? `Treino em ${location.trim()}` : "Novo update no feed",
-        metricLabel: postType,
-        type: postType === "run" ? "run" : postType === "achievement" || postType === "evolution" ? "progress" : "workout",
+        activityLabel: isRunPost
+          ? location.trim()
+            ? `Corrida em ${location.trim()}`
+            : "Nova corrida no feed"
+          : location.trim()
+            ? `Treino em ${location.trim()}`
+            : "Novo update no feed",
+        metricLabel: isRunPost ? runDetails.runDistance.trim() : "workout",
+        type: isRunPost ? "run" : "workout",
+        runTime: isRunPost ? runDetails.runTime.trim() : undefined,
+        runDistance: isRunPost ? runDetails.runDistance.trim() : undefined,
+        runPace: isRunPost ? runDetails.runPace.trim() : undefined,
       });
 
       resetComposer();
@@ -191,7 +223,7 @@ export function FeedScreen() {
             <Textarea
               value={caption}
               onChange={(event) => setCaption(event.target.value)}
-              placeholder="Compartilhe treino, corrida, PR, evolucao ou conquista."
+              placeholder="Compartilhe seu treino ou corrida."
               className="min-h-32"
             />
 
@@ -205,13 +237,43 @@ export function FeedScreen() {
             </div>
 
             <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                {postTypeOptions.map((option) => (
-                  <Chip key={option} active={postType === option} onClick={() => setPostType(option)}>
-                    {option}
+              <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">tipo do post</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Chip
+                    active={!isRunPost}
+                    onClick={() => {
+                      setIsRunPost(false);
+                      setRunDetails(emptyRunDetails());
+                    }}
+                  >
+                    treino
                   </Chip>
-                ))}
+                  <Chip active={isRunPost} onClick={() => setIsRunPost(true)}>
+                    corrida
+                  </Chip>
+                </div>
               </div>
+
+              {isRunPost ? (
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Input
+                    value={runDetails.runTime}
+                    onChange={(event) => setRunDetails((current) => ({ ...current, runTime: event.target.value }))}
+                    placeholder="Tempo ex: 42:15"
+                  />
+                  <Input
+                    value={runDetails.runDistance}
+                    onChange={(event) => setRunDetails((current) => ({ ...current, runDistance: event.target.value }))}
+                    placeholder="Distancia ex: 8 km"
+                  />
+                  <Input
+                    value={runDetails.runPace}
+                    onChange={(event) => setRunDetails((current) => ({ ...current, runPace: event.target.value }))}
+                    placeholder="Pace ex: 5:16/km"
+                  />
+                </div>
+              ) : null}
 
               {socialReady ? (
                 <div className="flex flex-wrap gap-2">
@@ -314,6 +376,13 @@ export function FeedScreen() {
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">{post.activityLabel}</p>
                       <h3 className="mt-2 text-2xl font-semibold tracking-[-0.05em]">{post.caption}</h3>
+                      {post.type === "run" ? (
+                        <RunPostMetrics
+                          runTime={post.runTime}
+                          runDistance={post.runDistance ?? (post.runKm ? `${post.runKm} km` : undefined)}
+                          runPace={post.runPace}
+                        />
+                      ) : null}
                     </div>
                     <div className="flex gap-2">
                       <Button variant={liked ? "primary" : "secondary"} onClick={() => toggleLocalLike(post.id)} className="gap-2">

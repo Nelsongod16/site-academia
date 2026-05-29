@@ -24,7 +24,7 @@ import { useStore } from "zustand";
 import { Button, Input } from "@/components/ui/kit";
 import { fetchExerciseCatalog } from "@/services/exerciseService";
 import { useAppStore } from "@/store/app-store";
-import type { CustomRoutineConfig, Exercise, RoutineType, RunRoutineConfig, WorkoutExercise } from "@/types/app";
+import type { CustomRoutineConfig, Exercise, RoutineType, RunRoutineConfig, TrainingCalendarStatus, WorkoutExercise } from "@/types/app";
 
 type ScreenMode = "list" | "builder" | "detail";
 
@@ -47,10 +47,12 @@ const emptyCustomExercise: CustomExerciseForm = {
 };
 
 const emptyRunRoutine: RunRoutineConfig = {
-  time: "",
-  kms: "",
-  distance: "",
-  pace: "",
+  desiredTime: "",
+  desiredDistance: "",
+  desiredPace: "",
+  actualTime: "",
+  actualDistance: "",
+  actualPace: "",
 };
 
 const emptyCustomRoutine: CustomRoutineConfig = {
@@ -157,6 +159,47 @@ function parseDurationToMinutes(value: string) {
   return 0;
 }
 
+function normalizeRunRoutine(config?: Partial<RunRoutineConfig> | null): RunRoutineConfig {
+  return {
+    desiredTime: config?.desiredTime ?? config?.time ?? "",
+    desiredDistance: config?.desiredDistance ?? config?.distance ?? config?.kms ?? "",
+    desiredPace: config?.desiredPace ?? config?.pace ?? "",
+    actualTime: config?.actualTime ?? "",
+    actualDistance: config?.actualDistance ?? "",
+    actualPace: config?.actualPace ?? "",
+  };
+}
+
+function runRoutineHasValues(config: RunRoutineConfig) {
+  return [
+    config.desiredTime,
+    config.desiredDistance,
+    config.desiredPace,
+    config.actualTime,
+    config.actualDistance,
+    config.actualPace,
+  ].some((value) => value.trim());
+}
+
+function buildRunRoutineQuickNote(config: RunRoutineConfig) {
+  const desired = [config.desiredTime, config.desiredDistance, config.desiredPace].filter((value) => value.trim()).join(" | ");
+  const actual = [config.actualTime, config.actualDistance, config.actualPace].filter((value) => value.trim()).join(" | ");
+
+  if (desired && actual) {
+    return `Desejado: ${desired} | Real: ${actual}`;
+  }
+
+  if (desired) {
+    return `Desejado: ${desired}`;
+  }
+
+  if (actual) {
+    return `Real: ${actual}`;
+  }
+
+  return "Rotina de corrida personalizada.";
+}
+
 function routineTypeLabel(type: RoutineType) {
   switch (type) {
     case "run":
@@ -168,13 +211,60 @@ function routineTypeLabel(type: RoutineType) {
   }
 }
 
+const miniCalendarWeekdays = ["S", "T", "Q", "Q", "S", "S", "D"];
+
+function toCalendarDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function toCalendarMonthKey(date: Date) {
+  return toCalendarDateKey(date).slice(0, 7);
+}
+
+function buildMiniCalendarDays(referenceDate: Date) {
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const leadingEmptyDays = (firstDay.getDay() + 6) % 7;
+  const days: Array<Date | null> = Array.from({ length: leadingEmptyDays }, () => null);
+
+  for (let day = 1; day <= lastDay.getDate(); day += 1) {
+    days.push(new Date(year, month, day));
+  }
+
+  while (days.length % 7 !== 0) {
+    days.push(null);
+  }
+
+  return days;
+}
+
+function cycleTrainingCalendarStatus(status?: TrainingCalendarStatus) {
+  if (status === "gym") {
+    return "rest" as const;
+  }
+
+  if (status === "rest") {
+    return null;
+  }
+
+  return "gym" as const;
+}
+
 export function TrainingScreen() {
   const searchParams = useSearchParams();
   const sessionUser = useStore(useAppStore, (state) => state.sessionUser);
   const workouts = useStore(useAppStore, (state) => state.workouts);
   const exercises = useStore(useAppStore, (state) => state.exercises);
+  const trainingCalendarEntries = useStore(useAppStore, (state) => state.trainingCalendarEntries);
   const saveWorkoutRoutine = useStore(useAppStore, (state) => state.saveWorkoutRoutine);
   const deleteWorkoutRoutine = useStore(useAppStore, (state) => state.deleteWorkoutRoutine);
+  const setTrainingCalendarEntry = useStore(useAppStore, (state) => state.setTrainingCalendarEntry);
   const upsertExercises = useStore(useAppStore, (state) => state.upsertExercises);
 
   const routineWorkouts = useMemo(
@@ -203,6 +293,35 @@ export function TrainingScreen() {
   const [catalogStatus, setCatalogStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [catalogError, setCatalogError] = useState("");
   const [catalogRequestKey, setCatalogRequestKey] = useState(0);
+  const [calendarReferenceDate] = useState(() => new Date());
+
+  const calendarDays = useMemo(() => buildMiniCalendarDays(calendarReferenceDate), [calendarReferenceDate]);
+  const currentMonthKey = useMemo(() => toCalendarMonthKey(calendarReferenceDate), [calendarReferenceDate]);
+  const calendarLabel = useMemo(
+    () => calendarReferenceDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }),
+    [calendarReferenceDate],
+  );
+  const todayKey = useMemo(() => toCalendarDateKey(new Date()), []);
+  const currentMonthCalendarSummary = useMemo(() => {
+    return Object.entries(trainingCalendarEntries).reduce(
+      (summary, [date, status]) => {
+        if (!date.startsWith(currentMonthKey)) {
+          return summary;
+        }
+
+        if (status === "gym") {
+          summary.gym += 1;
+        }
+
+        if (status === "rest") {
+          summary.rest += 1;
+        }
+
+        return summary;
+      },
+      { gym: 0, rest: 0 },
+    );
+  }, [currentMonthKey, trainingCalendarEntries]);
 
   const localExercises = useMemo(() => exercises.filter((exercise) => exercise.source === "local"), [exercises]);
   const libraryExercises = useMemo(() => {
@@ -396,7 +515,7 @@ export function TrainingScreen() {
         setRoutineTitle(routine.title);
         setSelectedExercises(routine.exercises.map(normalizeWorkoutExercise));
         setBuilderRoutineType(type);
-        setRunRoutine(routine.runConfig ?? emptyRunRoutine);
+        setRunRoutine(normalizeRunRoutine(routine.runConfig));
         setCustomRoutine(
           routine.customConfig ?? {
             duration: routine.durationMinutes ? String(routine.durationMinutes) : "",
@@ -523,7 +642,7 @@ export function TrainingScreen() {
         routineType: "strength",
       });
     } else if (builderRoutineType === "run") {
-      const durationMinutes = parseDurationToMinutes(runRoutine.time) || 30;
+      const durationMinutes = parseDurationToMinutes(runRoutine.desiredTime || runRoutine.actualTime) || 30;
 
       routineId = saveWorkoutRoutine({
         id: editingRoutineId ?? undefined,
@@ -533,7 +652,7 @@ export function TrainingScreen() {
         exercises: [],
         kind: "run",
         routineType: "run",
-        quickNote: runRoutine.distance || runRoutine.pace ? `${runRoutine.distance || "sem distancia"} | pace ${runRoutine.pace || "livre"}` : "Rotina de corrida personalizada.",
+        quickNote: buildRunRoutineQuickNote(runRoutine),
         runConfig: runRoutine,
       });
     } else {
@@ -653,10 +772,23 @@ export function TrainingScreen() {
     const routineType = routine.routineType ?? (routine.kind === "run" ? "run" : routine.kind === "rest" ? "custom" : "strength");
 
     if (routineType === "run") {
+      const runConfig = normalizeRunRoutine(routine.runConfig);
+
       return [
-        routine.runConfig?.time && `tempo ${routine.runConfig.time}`,
-        routine.runConfig?.kms && `${routine.runConfig.kms} km`,
-        routine.runConfig?.pace && `pace ${routine.runConfig.pace}`,
+        runConfig.desiredTime && `desejado ${runConfig.desiredTime}`,
+        runConfig.desiredDistance && runConfig.desiredDistance,
+        runConfig.desiredPace && `pace ${runConfig.desiredPace}`,
+        runConfig.actualTime && `real ${runConfig.actualTime}`,
+      ]
+        .filter(Boolean)
+        .join(" | ");
+    }
+
+    if (false) {
+      return [
+        routine?.runConfig?.time && `tempo ${routine?.runConfig?.time}`,
+        routine?.runConfig?.kms && `${routine?.runConfig?.kms} km`,
+        routine?.runConfig?.pace && `pace ${routine?.runConfig?.pace}`,
       ]
         .filter(Boolean)
         .join(" · ");
@@ -737,40 +869,108 @@ export function TrainingScreen() {
   return (
     <section className="rounded-[34px] bg-[linear-gradient(180deg,#0b1017_0%,#090c12_100%)] px-4 py-5 text-white shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:px-6 lg:px-7">
       {mode === "list" ? (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.78fr)]">
-          <div>
-            <h1 className="text-[1.9rem] font-semibold tracking-[-0.06em]">Rotinas</h1>
-            <button type="button" className="mt-7 inline-flex items-center gap-3 text-sm text-[var(--muted)]">
-              <ChevronDown className="size-4" />
-              As minhas rotinas ({routineWorkouts.length})
-            </button>
-            <div className="mt-4 space-y-4">
-              {routineWorkouts.map((routine) =>
-                renderRoutineCard(
-                  routine.id,
-                  routine.title.toLowerCase(),
-                  buildRoutineSubtitle(routine.id),
-                ),
-              )}
+        <>
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.78fr)]">
+            <div>
+              <h1 className="text-[1.9rem] font-semibold tracking-[-0.06em]">Rotinas</h1>
+              <button type="button" className="mt-7 inline-flex items-center gap-3 text-sm text-[var(--muted)]">
+                <ChevronDown className="size-4" />
+                As minhas rotinas ({routineWorkouts.length})
+              </button>
+              <div className="mt-4 space-y-4">
+                {routineWorkouts.map((routine) =>
+                  renderRoutineCard(
+                    routine.id,
+                    routine.title.toLowerCase(),
+                    buildRoutineSubtitle(routine.id),
+                  ),
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => setRoutineTypePickerOpen(true)}
+                className="flex w-full items-center justify-between rounded-[24px] bg-[#0b1017] px-5 py-6 text-left shadow-[0_12px_30px_rgba(0,0,0,0.24)] transition hover:bg-[#0f1520]"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="grid size-12 place-items-center rounded-[16px] bg-white/6">
+                    <NotebookPen className="size-5 text-[var(--accent)]" />
+                  </div>
+                  <span className="text-[1.45rem] font-medium tracking-[-0.04em]">Adicionar rotina</span>
+                </div>
+                <ChevronRight className="size-5 text-[var(--muted)]" />
+              </button>
             </div>
           </div>
-
-          <div className="space-y-4">
-            <button
-              type="button"
-              onClick={() => setRoutineTypePickerOpen(true)}
-              className="flex w-full items-center justify-between rounded-[24px] bg-[#0b1017] px-5 py-6 text-left shadow-[0_12px_30px_rgba(0,0,0,0.24)] transition hover:bg-[#0f1520]"
-            >
-              <div className="flex items-center gap-4">
-                <div className="grid size-12 place-items-center rounded-[16px] bg-white/6">
-                  <NotebookPen className="size-5 text-[var(--accent)]" />
-                </div>
-                <span className="text-[1.45rem] font-medium tracking-[-0.04em]">Adicionar rotina</span>
+          <div className="mt-6 max-w-[23rem] rounded-[24px] border border-white/8 bg-[#0b1017] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[0.68rem] uppercase tracking-[0.18em] text-[var(--muted)]">Calendario</p>
+                <h2 className="mt-1 text-[1rem] font-semibold tracking-[-0.04em]">Treino e descanso</h2>
               </div>
-              <ChevronRight className="size-5 text-[var(--muted)]" />
-            </button>
+              <span className="rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-[0.68rem] capitalize text-[var(--muted)]">
+                {calendarLabel}
+              </span>
+            </div>
+
+            <div className="mt-4 grid grid-cols-7 gap-1.5">
+              {miniCalendarWeekdays.map((label, index) => (
+                <span key={`${label}-${index}`} className="text-center text-[0.62rem] uppercase tracking-[0.14em] text-[var(--muted)]">
+                  {label}
+                </span>
+              ))}
+              {calendarDays.map((day, index) => {
+                if (!day) {
+                  return <div key={`empty-${index}`} className="h-8 rounded-[10px] bg-transparent" aria-hidden="true" />;
+                }
+
+                const dayKey = toCalendarDateKey(day);
+                const status = trainingCalendarEntries[dayKey];
+                const isToday = dayKey === todayKey;
+                const nextStatus = cycleTrainingCalendarStatus(status);
+
+                return (
+                  <button
+                    key={dayKey}
+                    type="button"
+                    onClick={() => setTrainingCalendarEntry(dayKey, nextStatus)}
+                    className={[
+                      "flex h-8 items-center justify-center rounded-[10px] border text-[0.72rem] font-medium transition",
+                      status === "gym"
+                        ? "border-[var(--accent)]/30 bg-[var(--accent)]/18 text-[var(--accent)]"
+                        : status === "rest"
+                          ? "border-[#c9a7ff]/30 bg-[#c9a7ff]/16 text-[#d8c0ff]"
+                          : "border-white/8 bg-white/[0.03] text-white/82 hover:bg-white/[0.06]",
+                      isToday ? "ring-1 ring-white/18" : "",
+                    ].join(" ")}
+                    aria-label={`Dia ${day.getDate()} marcado como ${status === "gym" ? "academia" : status === "rest" ? "descanso" : "livre"}.`}
+                    title={`Dia ${day.getDate()} - ${status === "gym" ? "academia" : status === "rest" ? "descanso" : "livre"}`}
+                  >
+                    {day.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 flex items-center gap-4 text-[0.68rem] text-[var(--muted)]">
+              <span className="inline-flex items-center gap-2">
+                <span className="size-2 rounded-full bg-[var(--accent)]" />
+                Academia
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span className="size-2 rounded-full bg-[#c9a7ff]" />
+                Descanso
+              </span>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between rounded-[16px] border border-white/8 bg-white/[0.03] px-3 py-2 text-[0.72rem] text-[var(--muted)]">
+              <span>{currentMonthCalendarSummary.gym} treinos</span>
+              <span>{currentMonthCalendarSummary.rest} descansos</span>
+            </div>
           </div>
-        </div>
+        </>
       ) : null}
 
       {mode === "builder" ? (
@@ -794,11 +994,7 @@ export function TrainingScreen() {
                 disabled={
                   !routineTitle.trim() ||
                   (builderRoutineType === "strength" && selectedExercises.length === 0) ||
-                  (builderRoutineType === "run" &&
-                    !runRoutine.time.trim() &&
-                    !runRoutine.kms.trim() &&
-                    !runRoutine.distance.trim() &&
-                    !runRoutine.pace.trim())
+                  (builderRoutineType === "run" && !runRoutineHasValues(runRoutine))
                 }
               >
                 Guardar rotina
@@ -947,38 +1143,56 @@ export function TrainingScreen() {
 
                   <div className="mt-6 grid gap-4 sm:grid-cols-2">
                     <div>
-                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Tempo</p>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Tempo desejado</p>
                       <input
-                        value={runRoutine.time}
-                        onChange={(event) => setRunRoutine((current) => ({ ...current, time: event.target.value }))}
+                        value={runRoutine.desiredTime}
+                        onChange={(event) => setRunRoutine((current) => ({ ...current, desiredTime: event.target.value }))}
                         placeholder="Ex: 45:00"
                         className={`${darkFieldClasses()} mt-2.5`}
                       />
                     </div>
                     <div>
-                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">KMs</p>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Pace desejado</p>
                       <input
-                        value={runRoutine.kms}
-                        onChange={(event) => setRunRoutine((current) => ({ ...current, kms: event.target.value }))}
-                        placeholder="Ex: 8"
+                        value={runRoutine.desiredPace}
+                        onChange={(event) => setRunRoutine((current) => ({ ...current, desiredPace: event.target.value }))}
+                        placeholder="Ex: 5:20/km"
                         className={`${darkFieldClasses()} mt-2.5`}
                       />
                     </div>
                     <div>
-                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Distancia</p>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Distancia desejada</p>
                       <input
-                        value={runRoutine.distance}
-                        onChange={(event) => setRunRoutine((current) => ({ ...current, distance: event.target.value }))}
+                        value={runRoutine.desiredDistance}
+                        onChange={(event) => setRunRoutine((current) => ({ ...current, desiredDistance: event.target.value }))}
                         placeholder="Ex: 8000 m"
                         className={`${darkFieldClasses()} mt-2.5`}
                       />
                     </div>
                     <div>
-                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Pace</p>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Tempo real</p>
                       <input
-                        value={runRoutine.pace}
-                        onChange={(event) => setRunRoutine((current) => ({ ...current, pace: event.target.value }))}
-                        placeholder="Ex: 5:20/km"
+                        value={runRoutine.actualTime}
+                        onChange={(event) => setRunRoutine((current) => ({ ...current, actualTime: event.target.value }))}
+                        placeholder="Ex: 47:30"
+                        className={`${darkFieldClasses()} mt-2.5`}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Pace real</p>
+                      <input
+                        value={runRoutine.actualPace}
+                        onChange={(event) => setRunRoutine((current) => ({ ...current, actualPace: event.target.value }))}
+                        placeholder="Ex: 5:56/km"
+                        className={`${darkFieldClasses()} mt-2.5`}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[0.82rem] font-medium text-[var(--muted)]">Distancia real</p>
+                      <input
+                        value={runRoutine.actualDistance}
+                        onChange={(event) => setRunRoutine((current) => ({ ...current, actualDistance: event.target.value }))}
+                        placeholder="Ex: 7900 m"
                         className={`${darkFieldClasses()} mt-2.5`}
                       />
                     </div>
@@ -1035,27 +1249,37 @@ export function TrainingScreen() {
                   <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-3.5">
                       <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
-                        {builderRoutineType === "strength" ? "Exercicios" : builderRoutineType === "run" ? "Tempo" : "Duracao"}
+                        {builderRoutineType === "strength" ? "Exercicios" : builderRoutineType === "run" ? "Desejado" : "Duracao"}
                       </p>
-                      <p className="mt-1.5 text-[1.85rem] leading-none">
-                        {builderRoutineType === "strength"
-                          ? selectedExercises.length
-                          : builderRoutineType === "run"
-                            ? runRoutine.time || "--"
-                            : customRoutine.duration || "--"}
-                      </p>
+                      {builderRoutineType === "run" ? (
+                        <div className="mt-2 space-y-1.5 text-[0.94rem] leading-5">
+                          <p>{runRoutine.desiredTime || "--"}</p>
+                          <p>{runRoutine.desiredPace || "--"}</p>
+                          <p>{runRoutine.desiredDistance || "--"}</p>
+                        </div>
+                      ) : (
+                        <p className="mt-1.5 text-[1.85rem] leading-none">
+                          {builderRoutineType === "strength" ? selectedExercises.length : customRoutine.duration || "--"}
+                        </p>
+                      )}
                     </div>
                     <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-3.5">
                       <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">
-                        {builderRoutineType === "strength" ? "Series" : builderRoutineType === "run" ? "Pace" : "Foco"}
+                        {builderRoutineType === "strength" ? "Series" : builderRoutineType === "run" ? "Real" : "Foco"}
                       </p>
-                      <p className="mt-1.5 text-[1.2rem] leading-none">
-                        {builderRoutineType === "strength"
-                          ? selectedExercises.reduce((total, item) => total + item.sets, 0)
-                          : builderRoutineType === "run"
-                            ? runRoutine.pace || "--"
+                      {builderRoutineType === "run" ? (
+                        <div className="mt-2 space-y-1.5 text-[0.94rem] leading-5">
+                          <p>{runRoutine.actualTime || "--"}</p>
+                          <p>{runRoutine.actualPace || "--"}</p>
+                          <p>{runRoutine.actualDistance || "--"}</p>
+                        </div>
+                      ) : (
+                        <p className="mt-1.5 text-[1.2rem] leading-none">
+                          {builderRoutineType === "strength"
+                            ? selectedExercises.reduce((total, item) => total + item.sets, 0)
                             : customRoutine.focus || "--"}
-                      </p>
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1175,12 +1399,20 @@ export function TrainingScreen() {
                   {builderRoutineType === "run" ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-[16px] bg-black/20 px-3 py-3">
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">KMs</p>
-                        <p className="mt-1 text-lg font-semibold">{runRoutine.kms || "--"}</p>
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Desejado</p>
+                        <div className="mt-2 space-y-1.5">
+                          <p className="text-lg font-semibold">{runRoutine.desiredTime || "--"}</p>
+                          <p className="text-sm text-white/72">{runRoutine.desiredPace || "--"}</p>
+                          <p className="text-sm text-white/72">{runRoutine.desiredDistance || "--"}</p>
+                        </div>
                       </div>
                       <div className="rounded-[16px] bg-black/20 px-3 py-3">
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Distancia</p>
-                        <p className="mt-1 text-lg font-semibold">{runRoutine.distance || "--"}</p>
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">Real</p>
+                        <div className="mt-2 space-y-1.5">
+                          <p className="text-lg font-semibold">{runRoutine.actualTime || "--"}</p>
+                          <p className="text-sm text-white/72">{runRoutine.actualPace || "--"}</p>
+                          <p className="text-sm text-white/72">{runRoutine.actualDistance || "--"}</p>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -1250,10 +1482,12 @@ export function TrainingScreen() {
               ) : selectedRoutineType === "run" ? (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {[
-                    ["Tempo", selectedRoutine.runConfig?.time || "--"],
-                    ["KMs", selectedRoutine.runConfig?.kms || "--"],
-                    ["Distancia", selectedRoutine.runConfig?.distance || "--"],
-                    ["Pace", selectedRoutine.runConfig?.pace || "--"],
+                    ["Tempo desejado", normalizeRunRoutine(selectedRoutine.runConfig).desiredTime || "--"],
+                    ["Pace desejado", normalizeRunRoutine(selectedRoutine.runConfig).desiredPace || "--"],
+                    ["Distancia desejada", normalizeRunRoutine(selectedRoutine.runConfig).desiredDistance || "--"],
+                    ["Tempo real", normalizeRunRoutine(selectedRoutine.runConfig).actualTime || "--"],
+                    ["Pace real", normalizeRunRoutine(selectedRoutine.runConfig).actualPace || "--"],
+                    ["Distancia real", normalizeRunRoutine(selectedRoutine.runConfig).actualDistance || "--"],
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">{label}</p>
@@ -1313,25 +1547,25 @@ export function TrainingScreen() {
               <div className="mt-5 grid grid-cols-3 gap-3 text-sm">
                 <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
                   <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">
-                    {selectedRoutineType === "strength" ? "Exercicios" : selectedRoutineType === "run" ? "KMs" : "Foco"}
+                    {selectedRoutineType === "strength" ? "Exercicios" : selectedRoutineType === "run" ? "Distancia desejada" : "Foco"}
                   </p>
                   <p className="mt-2 text-2xl">
                     {selectedRoutineType === "strength"
                       ? selectedRoutine.exercises.length
                       : selectedRoutineType === "run"
-                        ? selectedRoutine.runConfig?.kms || "--"
+                        ? normalizeRunRoutine(selectedRoutine.runConfig).desiredDistance || "--"
                         : selectedRoutine.customConfig?.focus || "--"}
                   </p>
                 </div>
                 <div className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
                   <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">
-                    {selectedRoutineType === "strength" ? "Series" : selectedRoutineType === "run" ? "Pace" : "Tipo"}
+                    {selectedRoutineType === "strength" ? "Series" : selectedRoutineType === "run" ? "Pace desejado" : "Tipo"}
                   </p>
                   <p className="mt-2 text-2xl">
                     {selectedRoutineType === "strength"
                       ? selectedRoutine.exercises.reduce((total, item) => total + item.sets, 0)
                       : selectedRoutineType === "run"
-                        ? selectedRoutine.runConfig?.pace || "--"
+                        ? normalizeRunRoutine(selectedRoutine.runConfig).desiredPace || "--"
                         : "Livre"}
                   </p>
                 </div>

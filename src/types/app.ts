@@ -1,9 +1,10 @@
-import type { SocialSex, SocialVisibility } from "@/types/social";
+import type { RunPostMetrics, SocialSex, SocialVisibility } from "@/types/social";
 
 export type TrainingTag = "forca" | "hipertrofia" | "cardio" | "resistencia";
 export type ExerciseDifficulty = "iniciante" | "intermediario" | "avancado";
 export type WorkoutKind = "gym" | "run" | "swim" | "rest";
 export type RoutineType = "strength" | "run" | "custom";
+export type TrainingCalendarStatus = "gym" | "rest";
 
 export interface SessionUser {
   id: string;
@@ -35,7 +36,7 @@ export interface FeedComment {
   createdAt: string;
 }
 
-export interface FeedPost {
+export interface FeedPost extends RunPostMetrics {
   id: string;
   authorId: string;
   authorName: string;
@@ -48,7 +49,6 @@ export interface FeedPost {
   createdAt: string;
   workoutMinutes?: number;
   runKm?: number;
-  runTime?: string;
   swimDistance?: number;
   likes: number;
   likedByUserIds: string[];
@@ -136,10 +136,16 @@ export interface WorkoutExercise {
 }
 
 export interface RunRoutineConfig {
-  time: string;
-  kms: string;
-  distance: string;
-  pace: string;
+  desiredTime: string;
+  desiredDistance: string;
+  desiredPace: string;
+  actualTime: string;
+  actualDistance: string;
+  actualPace: string;
+  time?: string;
+  kms?: string;
+  distance?: string;
+  pace?: string;
 }
 
 export interface CustomRoutineConfig {

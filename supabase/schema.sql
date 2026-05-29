@@ -59,6 +59,9 @@ create table if not exists public.posts (
   caption text not null,
   image_url text not null,
   post_type text not null default 'workout',
+  run_time text,
+  run_distance text,
+  run_pace text,
   location text,
   visibility text not null default 'public',
   likes_count integer not null default 0,
@@ -66,6 +69,10 @@ create table if not exists public.posts (
   moderation_state text not null default 'clean',
   created_at timestamptz not null default now()
 );
+
+alter table public.posts add column if not exists run_time text;
+alter table public.posts add column if not exists run_distance text;
+alter table public.posts add column if not exists run_pace text;
 
 create table if not exists public.comments (
   id uuid primary key default gen_random_uuid(),

@@ -8,6 +8,12 @@ export type FriendRequestStatus = "pending" | "accepted" | "rejected" | "cancell
 export type ReportTargetType = "user" | "post" | "comment";
 export type MessageThreadStatus = "planned" | "active" | "archived";
 
+export interface RunPostMetrics {
+  runTime?: string;
+  runDistance?: string;
+  runPace?: string;
+}
+
 export interface SocialProfile {
   id: string;
   email: string;
@@ -61,7 +67,7 @@ export interface PhysicalProgressEntry {
   createdAt: string;
 }
 
-export interface SocialPost {
+export interface SocialPost extends RunPostMetrics {
   id: string;
   userId: string;
   authorName: string;

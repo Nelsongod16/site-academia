@@ -7,6 +7,7 @@ import { useStore } from "zustand";
 
 import { PageFrame } from "@/components/layout/page-frame";
 import { ProfileOnboardingModal } from "@/components/social/profile-onboarding-modal";
+import { RunPostMetrics } from "@/components/social/run-post-metrics";
 import { SocialPostCard } from "@/components/social/social-post-card";
 import { Button, SectionHeading, StrongSurface, Surface } from "@/components/ui/kit";
 import { useCurrentSocialState, useProfilePosts } from "@/hooks/use-social-session";
@@ -220,6 +221,13 @@ export function ProfileScreen() {
                 <div className="p-5">
                   <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">{post.activityLabel}</p>
                   <h3 className="mt-2 text-2xl font-semibold tracking-[-0.05em]">{post.caption}</h3>
+                  {post.type === "run" ? (
+                    <RunPostMetrics
+                      runTime={post.runTime}
+                      runDistance={post.runDistance ?? (post.runKm ? `${post.runKm} km` : undefined)}
+                      runPace={post.runPace}
+                    />
+                  ) : null}
                   <p className="mt-2 text-sm text-[var(--muted)]">
                     {post.likes} curtidas · {new Date(post.createdAt).toLocaleDateString("pt-BR")}
                   </p>

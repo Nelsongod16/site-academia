@@ -5,7 +5,18 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { commentsSeed, communityProfiles, demoUsers, exerciseLibrary, feedSeed, photoSeed, runSeed, swimSeed, workoutsSeed } from "@/lib/demo-data";
 import { isoNow } from "@/lib/utils";
-import type { CustomRoutineConfig, Exercise, FeedPost, RunRoutineConfig, RoutineType, SessionUser, SharedSnapshot, WorkoutExercise, WorkoutKind } from "@/types/app";
+import type {
+  CustomRoutineConfig,
+  Exercise,
+  FeedPost,
+  RunRoutineConfig,
+  RoutineType,
+  SessionUser,
+  SharedSnapshot,
+  TrainingCalendarStatus,
+  WorkoutExercise,
+  WorkoutKind,
+} from "@/types/app";
 
 type ConnectionHint = "online" | "offline" | "syncing" | "saved";
 
@@ -14,6 +25,7 @@ interface AppState extends SharedSnapshot {
   sessionUser: SessionUser | null;
   syncMode: "local" | "firebase-ready" | "firebase-live";
   quickWorkoutId: string | null;
+  trainingCalendarEntries: Record<string, TrainingCalendarStatus>;
   commentsByPost: Record<string, { id: string; author: string; text: string; createdAt: string }[]>;
   scrollMemory: Record<string, number>;
   connectionHint: ConnectionHint;
@@ -75,7 +87,16 @@ interface AppState extends SharedSnapshot {
   updateWorkoutExercise: (workoutId: string, exerciseId: string, patch: Partial<WorkoutExercise>) => void;
   addExercisesToWorkout: (workoutId: string, exerciseIds: string[]) => void;
   upsertExercises: (payload: Exercise[]) => void;
-  addFeedPost: (payload: { caption: string; image: string; activityLabel?: string; metricLabel?: string; type?: FeedPost["type"] }) => void;
+  addFeedPost: (payload: {
+    caption: string;
+    image: string;
+    activityLabel?: string;
+    metricLabel?: string;
+    type?: FeedPost["type"];
+    runTime?: string;
+    runDistance?: string;
+    runPace?: string;
+  }) => void;
   favoriteExercise: (exerciseId: string) => void;
   toggleFollowProfile: (profileId: string) => void;
   toggleFriendProfile: (profileId: string) => void;
@@ -83,6 +104,7 @@ interface AppState extends SharedSnapshot {
   addRun: (payload: { km: number; meters: number; time: string }) => void;
   addSwim: (payload: { distance: number; time: string }) => void;
   setQuickWorkout: (workoutId: string | null) => void;
+  setTrainingCalendarEntry: (date: string, status: TrainingCalendarStatus | null) => void;
   rememberScroll: (route: string, y: number) => void;
   hydrateSharedSnapshot: (snapshot: SharedSnapshot) => void;
 }
@@ -110,6 +132,7 @@ export const useAppStore = create<AppState>()(
       sessionUser: null,
       syncMode: "local",
       quickWorkoutId: "wed",
+      trainingCalendarEntries: {},
       scrollMemory: {},
       connectionHint: "saved",
       setHasHydrated: (value) => set({ hasHydrated: value }),
@@ -439,7 +462,7 @@ export const useAppStore = create<AppState>()(
             connectionHint: "saved",
           };
         }),
-      addFeedPost: ({ caption, image, activityLabel, metricLabel, type = "workout" }) =>
+      addFeedPost: ({ caption, image, activityLabel, metricLabel, type = "workout", runTime, runDistance, runPace }) =>
         set((state) => {
           const sessionUser = state.sessionUser;
 
@@ -460,6 +483,9 @@ export const useAppStore = create<AppState>()(
                 caption: caption.trim(),
                 image,
                 createdAt: isoNow(),
+                runTime,
+                runDistance,
+                runPace,
                 likes: 0,
                 likedByUserIds: [],
                 streakDays: 1,
@@ -576,6 +602,21 @@ export const useAppStore = create<AppState>()(
           connectionHint: "saved",
         })),
       setQuickWorkout: (workoutId) => set({ quickWorkoutId: workoutId }),
+      setTrainingCalendarEntry: (date, status) =>
+        set((state) => {
+          const trainingCalendarEntries = { ...state.trainingCalendarEntries };
+
+          if (status) {
+            trainingCalendarEntries[date] = status;
+          } else {
+            delete trainingCalendarEntries[date];
+          }
+
+          return {
+            trainingCalendarEntries,
+            connectionHint: "saved",
+          };
+        }),
       rememberScroll: (route, y) =>
         set((state) => ({
           scrollMemory: {
@@ -608,6 +649,7 @@ export const useAppStore = create<AppState>()(
         favoriteExerciseIds: state.favoriteExerciseIds,
         recentExerciseIds: state.recentExerciseIds,
         quickWorkoutId: state.quickWorkoutId,
+        trainingCalendarEntries: state.trainingCalendarEntries,
         sessionUser: state.sessionUser,
         scrollMemory: state.scrollMemory,
       }),

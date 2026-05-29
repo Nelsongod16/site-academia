@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Flag, Heart, MapPin, MessageCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { RunPostMetrics } from "@/components/social/run-post-metrics";
 import { Button, Input } from "@/components/ui/kit";
 import { addPostComment, reportEntity, subscribePostComments, togglePostLike } from "@/lib/firebase/social";
 import type { SocialComment, SocialPost, SocialProfile } from "@/types/social";
@@ -132,6 +133,9 @@ export function SocialPostCard({
                 ) : null}
               </div>
               <h3 className="mt-4 text-[30px] font-semibold leading-[1.02] tracking-[-0.06em]">{post.caption}</h3>
+              {post.postType === "run" ? (
+                <RunPostMetrics runTime={post.runTime} runDistance={post.runDistance} runPace={post.runPace} />
+              ) : null}
               <p className="mt-3 text-sm text-white/70">
                 {new Date(post.createdAt).toLocaleDateString("pt-BR", {
                   day: "2-digit",

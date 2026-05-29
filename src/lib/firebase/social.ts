@@ -113,6 +113,9 @@ function mapPostRow(row: Record<string, unknown>): SocialPost {
     caption: String(row.caption ?? ""),
     imageUrl: String(row.image_url ?? ""),
     postType: (row.post_type as SocialPost["postType"]) ?? "workout",
+    runTime: row.run_time ? String(row.run_time) : undefined,
+    runDistance: row.run_distance ? String(row.run_distance) : undefined,
+    runPace: row.run_pace ? String(row.run_pace) : undefined,
     location: row.location ? String(row.location) : undefined,
     visibility: (row.visibility as SocialPost["visibility"]) ?? "public",
     likesCount: Number(row.likes_count ?? 0),
@@ -512,6 +515,9 @@ export async function createSocialPost(args: {
   caption: string;
   imageUrl: string;
   postType: SocialPost["postType"];
+  runTime?: string;
+  runDistance?: string;
+  runPace?: string;
   location?: string;
   visibility: SocialPost["visibility"];
 }) {
@@ -534,6 +540,9 @@ export async function createSocialPost(args: {
     caption: args.caption.trim(),
     image_url: args.imageUrl,
     post_type: args.postType,
+    run_time: args.runTime?.trim() || null,
+    run_distance: args.runDistance?.trim() || null,
+    run_pace: args.runPace?.trim() || null,
     location: args.location?.trim() || null,
     visibility: args.visibility,
     likes_count: 0,
