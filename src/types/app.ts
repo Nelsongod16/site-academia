@@ -1,6 +1,7 @@
+import type { SocialSex, SocialVisibility } from "@/types/social";
+
 export type TrainingTag = "forca" | "hipertrofia" | "cardio" | "resistencia";
 export type ExerciseDifficulty = "iniciante" | "intermediario" | "avancado";
-export type EquipmentType = "maquina" | "halter" | "barra" | "peso corporal" | "cabo";
 export type WorkoutKind = "gym" | "run" | "swim" | "rest";
 
 export interface SessionUser {
@@ -8,9 +9,22 @@ export interface SessionUser {
   name: string;
   email: string;
   avatar: string;
-  mode: "demo" | "firebase";
+  mode: "demo" | "firebase" | "local";
   avatarImage?: string;
   bio?: string;
+  username?: string;
+  emailVerified?: boolean;
+  profileCompleted?: boolean;
+  city?: string;
+  country?: string;
+  fitnessGoal?: string;
+  trainingStyles?: string[];
+  age?: number;
+  birthDate?: string;
+  weightKg?: number;
+  heightCm?: number;
+  sex?: SocialSex;
+  visibility?: SocialVisibility;
 }
 
 export interface FeedComment {
@@ -89,9 +103,9 @@ export interface Exercise {
   name: string;
   muscle: string;
   secondaryMuscles: string[];
-  category: "forca" | "hipertrofia" | "cardio" | "resistencia";
-  difficulty: ExerciseDifficulty;
-  equipment: EquipmentType;
+  category: TrainingTag | string;
+  difficulty: ExerciseDifficulty | string;
+  equipment: string;
   isMachine: boolean;
   description: string;
   execution: string;
@@ -99,6 +113,12 @@ export interface Exercise {
   videoUrl?: string;
   favorite?: boolean;
   relatedIds: string[];
+  apiExerciseId?: string;
+  bodyPart?: string;
+  target?: string;
+  instructions?: string[];
+  imageFallbackUrl?: string;
+  source?: "local" | "exercisedb";
 }
 
 export interface WorkoutExercise {

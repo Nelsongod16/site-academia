@@ -1,571 +1,650 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
-import { closestCenter, DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { CheckCircle2, Copy, Plus, Search, Sparkles, StretchHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ChangeEvent } from "react";
 import { useStore } from "zustand";
+import { ArrowLeft, ChevronDown, ChevronRight, CirclePlus, FolderPlus, GripVertical, ImagePlus, MoreVertical, NotebookPen, Search, Trash2, X } from "lucide-react";
 
-import { PageFrame } from "@/components/layout/page-frame";
-import { Button, Chip, Input, SectionHeading, StrongSurface, Surface } from "@/components/ui/kit";
-import { cn, formatDuration } from "@/lib/utils";
+import { Button, Input } from "@/components/ui/kit";
 import { useAppStore } from "@/store/app-store";
-import type { Exercise, WorkoutExercise, WorkoutKind } from "@/types/app";
+import type { Exercise, WorkoutExercise } from "@/types/app";
 
-const muscleGroupOptions = ["peito", "ombro", "triceps", "costas", "biceps", "quadriceps", "gluteo", "posterior", "cardio"];
+type ScreenMode = "list" | "builder" | "detail";
 
-type BuilderConfig = {
-  sets: number;
-  reps: string;
-  weight: string;
-  note: string;
+type CustomExerciseForm = {
+  name: string;
+  type: string;
+  equipment: string;
+  primaryMuscle: string;
+  otherMuscles: string;
+  imageDataUrl: string;
 };
 
-function matchesGroup(exercise: Exercise, group: string) {
-  return (
-    exercise.muscle.toLowerCase().includes(group.toLowerCase()) ||
-    exercise.secondaryMuscles.some((item) => item.toLowerCase().includes(group.toLowerCase()))
-  );
+const emptyCustomExercise: CustomExerciseForm = {
+  name: "",
+  type: "",
+  equipment: "",
+  primaryMuscle: "",
+  otherMuscles: "",
+  imageDataUrl: "",
+};
+
+function toTitle(value: string) {
+  return value.trim().replace(/\s+/g, " ");
 }
 
-function WorkoutExerciseCard({
-  id,
-  detail,
-  exercise,
-  index,
-  total,
-  onChange,
-}: {
-  id: string;
-  detail: Exercise;
-  exercise: WorkoutExercise;
-  index: number;
-  total: number;
-  onChange: (patch: Partial<WorkoutExercise>) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className="overflow-hidden rounded-[18px] border border-white/6 bg-white/[0.03]"
-    >
-      <div className="grid md:grid-cols-[132px_1fr]">
-        <img src={detail.mediaUrl} alt={detail.name} className="h-full min-h-[138px] w-full object-cover" />
-        <div className="space-y-4 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">
-                bloco {String(index + 1).padStart(2, "0")}
-              </p>
-              <h3 className="mt-2 text-lg font-semibold tracking-[-0.04em]">{detail.name}</h3>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                {detail.muscle} / {detail.equipment}
-              </p>
-            </div>
-
-            <button className="rounded-[14px] bg-white/6 p-3 text-[var(--muted)]" {...attributes} {...listeners}>
-              <StretchHorizontal className="size-4" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <Input value={String(exercise.sets)} onChange={(event) => onChange({ sets: Number(event.target.value) || 0 })} placeholder="Series" />
-            <Input value={exercise.reps} onChange={(event) => onChange({ reps: event.target.value })} placeholder="Reps" />
-            <Input value={exercise.weight} onChange={(event) => onChange({ weight: event.target.value })} placeholder="Carga" />
-          </div>
-
-          <Input value={exercise.note ?? ""} onChange={(event) => onChange({ note: event.target.value })} placeholder="Observacao" />
-
-          <div>
-            <div className="mb-2 flex items-center justify-between text-xs text-[var(--muted)]">
-              <span>progresso do bloco</span>
-              <span>{Math.round(((index + 1) / Math.max(total, 1)) * 100)}%</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-white/6">
-              <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(((index + 1) / Math.max(total, 1)) * 100)}%` }} />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BuilderExerciseCard({
-  exercise,
-  selected,
-  config,
-  onToggle,
-  onChange,
-}: {
-  exercise: Exercise;
-  selected: boolean;
-  config?: BuilderConfig;
-  onToggle: () => void;
-  onChange: (patch: Partial<BuilderConfig>) => void;
-}) {
-  return (
-    <div className="overflow-hidden rounded-[18px] border border-white/6 bg-white/[0.03]">
-      <div className="grid grid-cols-[112px_1fr]">
-        <img src={exercise.mediaUrl} alt={exercise.name} className="h-full min-h-[144px] w-full object-cover" />
-        <div className="space-y-3 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-base font-semibold tracking-[-0.03em]">{exercise.name}</h3>
-              <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
-                {exercise.muscle} / {exercise.equipment}
-              </p>
-            </div>
-            <button
-              onClick={onToggle}
-              className={cn(
-                "rounded-[12px] px-3 py-2 text-xs uppercase tracking-[0.18em] transition",
-                selected ? "bg-white text-black" : "bg-white/6 text-white",
-              )}
-            >
-              {selected ? "remover" : "adicionar"}
-            </button>
-          </div>
-
-          {selected ? (
-            <div className="space-y-2">
-              <div className="grid grid-cols-3 gap-2">
-                <Input value={String(config?.sets ?? 3)} onChange={(event) => onChange({ sets: Number(event.target.value) || 0 })} placeholder="Series" />
-                <Input value={config?.reps ?? "10-12"} onChange={(event) => onChange({ reps: event.target.value })} placeholder="Reps" />
-                <Input value={config?.weight ?? "carga livre"} onChange={(event) => onChange({ weight: event.target.value })} placeholder="Carga" />
-              </div>
-              <Input value={config?.note ?? ""} onChange={(event) => onChange({ note: event.target.value })} placeholder="Observacao" />
-            </div>
-          ) : (
-            <p className="text-sm leading-6 text-[var(--muted)]">{exercise.description}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+function initialExercise(exerciseId: string): WorkoutExercise {
+  return {
+    exerciseId,
+    sets: 3,
+    reps: "10-12",
+    weight: "carga livre",
+  };
 }
 
 export function TrainingScreen() {
+  const sessionUser = useStore(useAppStore, (state) => state.sessionUser);
   const workouts = useStore(useAppStore, (state) => state.workouts);
   const exercises = useStore(useAppStore, (state) => state.exercises);
-  const favoriteExerciseIds = useStore(useAppStore, (state) => state.favoriteExerciseIds);
-  const recentExerciseIds = useStore(useAppStore, (state) => state.recentExerciseIds);
-  const toggleWorkoutCompleted = useStore(useAppStore, (state) => state.toggleWorkoutCompleted);
-  const addWorkoutNote = useStore(useAppStore, (state) => state.addWorkoutNote);
-  const duplicateWorkout = useStore(useAppStore, (state) => state.duplicateWorkout);
-  const duplicateLastWeek = useStore(useAppStore, (state) => state.duplicateLastWeek);
-  const addCustomWorkout = useStore(useAppStore, (state) => state.addCustomWorkout);
-  const reorderWorkoutExercises = useStore(useAppStore, (state) => state.reorderWorkoutExercises);
-  const updateWorkoutExercise = useStore(useAppStore, (state) => state.updateWorkoutExercise);
-  const addExercisesToWorkout = useStore(useAppStore, (state) => state.addExercisesToWorkout);
-  const quickWorkoutId = useStore(useAppStore, (state) => state.quickWorkoutId);
-  const setQuickWorkout = useStore(useAppStore, (state) => state.setQuickWorkout);
-  const [newTitle, setNewTitle] = useState("");
-  const [newDuration, setNewDuration] = useState("60");
-  const [newKind, setNewKind] = useState<WorkoutKind>("gym");
-  const [newGroups, setNewGroups] = useState<string[]>(["peito", "ombro", "triceps"]);
-  const [builderSearch, setBuilderSearch] = useState("");
-  const [builderExercises, setBuilderExercises] = useState<Record<string, BuilderConfig>>({});
+  const saveWorkoutRoutine = useStore(useAppStore, (state) => state.saveWorkoutRoutine);
+  const deleteWorkoutRoutine = useStore(useAppStore, (state) => state.deleteWorkoutRoutine);
+  const upsertExercises = useStore(useAppStore, (state) => state.upsertExercises);
 
-  const sensors = useSensors(useSensor(PointerSensor));
-  const selectedWorkout = workouts.find((workout) => workout.id === quickWorkoutId) ?? workouts[0];
-  const selectedWorkoutDetails = selectedWorkout?.exercises
-    .map((exercise) => ({
-      detail: exercises.find((item) => item.id === exercise.exerciseId),
-      record: exercise,
-    }))
-    .filter((item): item is { detail: Exercise; record: WorkoutExercise } => Boolean(item.detail));
+  const routineWorkouts = useMemo(() => workouts.filter((workout) => workout.kind === "gym"), [workouts]);
+  const exerciseMap = useMemo(() => new Map(exercises.map((exercise) => [exercise.id, exercise])), [exercises]);
 
-  const currentHeroImage = selectedWorkoutDetails?.[0]?.detail.mediaUrl ?? exercises[0]?.mediaUrl;
-  const completionRatio = selectedWorkout?.completed
-    ? 100
-    : Math.min(94, 28 + (selectedWorkout?.exercises.length ?? 0) * 18);
-  const favoriteExercises = exercises.filter((exercise) => favoriteExerciseIds.includes(exercise.id)).slice(0, 4);
-  const recentExercises = exercises.filter((exercise) => recentExerciseIds.includes(exercise.id)).slice(0, 4);
-  const builderSelectionCount = Object.keys(builderExercises).length;
+  const [mode, setMode] = useState<ScreenMode>("list");
+  const [selectedRoutineId, setSelectedRoutineId] = useState<string | null>(routineWorkouts[0]?.id ?? null);
+  const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
+  const [routineTitle, setRoutineTitle] = useState("");
+  const [selectedExercises, setSelectedExercises] = useState<WorkoutExercise[]>([]);
+  const [equipmentFilter, setEquipmentFilter] = useState("Todos os equipamentos");
+  const [muscleFilter, setMuscleFilter] = useState("Todos os musculos");
+  const [search, setSearch] = useState("");
+  const [customModalOpen, setCustomModalOpen] = useState(false);
+  const [customExercise, setCustomExercise] = useState<CustomExerciseForm>(emptyCustomExercise);
 
-  const builderCandidates = useMemo(() => {
-    const query = builderSearch.trim().toLowerCase();
-    const filtered = exercises.filter((exercise) => {
-      if (newKind === "gym") {
-        if (!newGroups.length) {
-          return false;
-        }
+  const selectedRoutine = useMemo(
+    () => routineWorkouts.find((workout) => workout.id === selectedRoutineId) ?? null,
+    [routineWorkouts, selectedRoutineId],
+  );
 
-        const groupMatch = newGroups.some((group) => matchesGroup(exercise, group));
-        if (!groupMatch) {
-          return false;
-        }
-      }
+  const filteredExercises = useMemo(() => {
+    return exercises.filter((exercise) => {
+      const matchEquipment = equipmentFilter === "Todos os equipamentos" || exercise.equipment === equipmentFilter;
+      const matchMuscle = muscleFilter === "Todos os musculos" || exercise.muscle === muscleFilter;
+      const query = search.trim().toLowerCase();
+      const matchSearch =
+        !query ||
+        exercise.name.toLowerCase().includes(query) ||
+        exercise.muscle.toLowerCase().includes(query) ||
+        exercise.secondaryMuscles.some((muscle) => muscle.toLowerCase().includes(query));
 
-      if (!query) {
-        return true;
-      }
-
-      return `${exercise.name} ${exercise.muscle} ${exercise.description}`.toLowerCase().includes(query);
+      return matchEquipment && matchMuscle && matchSearch;
     });
+  }, [equipmentFilter, exercises, muscleFilter, search]);
 
-    return filtered.sort((a, b) => Number(Boolean(builderExercises[b.id])) - Number(Boolean(builderExercises[a.id])));
-  }, [builderExercises, builderSearch, exercises, newGroups, newKind]);
+  const allEquipments = useMemo(
+    () => ["Todos os equipamentos", ...Array.from(new Set(exercises.map((exercise) => exercise.equipment)))],
+    [exercises],
+  );
 
-  function toggleGroup(group: string) {
-    setNewGroups((state) => (state.includes(group) ? state.filter((item) => item !== group) : [...state, group]));
+  const allMuscles = useMemo(
+    () => ["Todos os musculos", ...Array.from(new Set(exercises.map((exercise) => exercise.muscle)))],
+    [exercises],
+  );
+
+  function openRoutineDetail(routineId: string) {
+    setSelectedRoutineId(routineId);
+    setMode("detail");
   }
 
-  function toggleBuilderExercise(exerciseId: string) {
-    setBuilderExercises((state) => {
-      if (state[exerciseId]) {
-        const nextState = { ...state };
-        delete nextState[exerciseId];
-        return nextState;
+  function openBuilder(routineId?: string) {
+    if (routineId) {
+      const routine = routineWorkouts.find((item) => item.id === routineId);
+
+      if (routine) {
+        setEditingRoutineId(routine.id);
+        setRoutineTitle(routine.title);
+        setSelectedExercises(routine.exercises);
+      }
+    } else {
+      setEditingRoutineId(null);
+      setRoutineTitle("");
+      setSelectedExercises([]);
+    }
+
+    setMode("builder");
+  }
+
+  function addExerciseToDraft(exerciseId: string) {
+    setSelectedExercises((current) => {
+      if (current.some((item) => item.exerciseId === exerciseId)) {
+        return current;
       }
 
-      return {
-        ...state,
-        [exerciseId]: {
-          sets: 3,
-          reps: "10-12",
-          weight: "carga livre",
-          note: "",
-        },
-      };
+      return [...current, initialExercise(exerciseId)];
     });
   }
 
-  function handleCreateWorkout() {
-    const title = newTitle.trim();
-    if (!title) {
+  function removeExerciseFromDraft(exerciseId: string) {
+    setSelectedExercises((current) => current.filter((item) => item.exerciseId !== exerciseId));
+  }
+
+  function updateDraftExercise(exerciseId: string, patch: Partial<WorkoutExercise>) {
+    setSelectedExercises((current) =>
+      current.map((item) => (item.exerciseId === exerciseId ? { ...item, ...patch } : item)),
+    );
+  }
+
+  function saveRoutine() {
+    const cleanTitle = toTitle(routineTitle);
+
+    if (!cleanTitle || selectedExercises.length === 0) {
       return;
     }
 
-    const muscleGroups = newKind === "gym" ? newGroups : ["cardio"];
-    const builtExercises = Object.entries(builderExercises).map(([exerciseId, config]) => ({
-      exerciseId,
-      sets: config.sets,
-      reps: config.reps,
-      weight: config.weight,
-      note: config.note,
-    }));
+    const muscleGroups = Array.from(
+      new Set(
+        selectedExercises.flatMap((item) => {
+          const exercise = exerciseMap.get(item.exerciseId);
+          return exercise ? [exercise.muscle, ...exercise.secondaryMuscles.slice(0, 1)] : [];
+        }),
+      ),
+    );
 
-    if (newKind === "gym" && builtExercises.length === 0) {
+    const routineId = saveWorkoutRoutine({
+      id: editingRoutineId ?? undefined,
+      title: cleanTitle,
+      durationMinutes: Math.max(20, selectedExercises.length * 12),
+      muscleGroups,
+      exercises: selectedExercises,
+    });
+
+    setSelectedRoutineId(routineId);
+    setMode("detail");
+  }
+
+  function handleCustomImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
       return;
     }
 
-    addCustomWorkout({
-      title,
-      kind: newKind,
-      durationMinutes: Number(newDuration) || 45,
-      muscleGroups: muscleGroups.length ? muscleGroups : ["cardio"],
-      exercises: builtExercises,
-    });
-
-    setNewTitle("");
-    setNewDuration("60");
-    setBuilderSearch("");
-    setBuilderExercises({});
-    setNewGroups(["peito", "ombro", "triceps"]);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCustomExercise((current) => ({
+        ...current,
+        imageDataUrl: typeof reader.result === "string" ? reader.result : "",
+      }));
+    };
+    reader.readAsDataURL(file);
   }
 
-  if (!selectedWorkout) {
-    return null;
+  function createCustomExercise() {
+    const cleanName = toTitle(customExercise.name);
+    const primaryMuscle = customExercise.primaryMuscle.trim().toLowerCase();
+
+    if (!cleanName || !primaryMuscle) {
+      return;
+    }
+
+    const exerciseId = `custom-${crypto.randomUUID()}`;
+    const nextExercise: Exercise = {
+      id: exerciseId,
+      name: cleanName,
+      muscle: primaryMuscle,
+      secondaryMuscles: customExercise.otherMuscles
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean),
+      category: customExercise.type.trim().toLowerCase() || "hipertrofia",
+      difficulty: "iniciante",
+      equipment: customExercise.equipment.trim().toLowerCase() || "livre",
+      isMachine: customExercise.equipment.trim().toLowerCase() === "maquina",
+      description: "Exercicio personalizado criado pela biblioteca do usuario.",
+      execution: "Ajuste a execucao dentro da sua rotina conforme a necessidade do treino.",
+      mediaUrl:
+        customExercise.imageDataUrl ||
+        "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=900&q=80",
+      relatedIds: [],
+      source: "local",
+    };
+
+    upsertExercises([nextExercise]);
+    addExerciseToDraft(exerciseId);
+    setCustomExercise(emptyCustomExercise);
+    setCustomModalOpen(false);
+  }
+
+  function renderRoutineCard(routineId: string, title: string, subtitle: string) {
+    return (
+      <button
+        type="button"
+        onClick={() => openRoutineDetail(routineId)}
+        className="flex w-full items-center gap-4 rounded-[28px] bg-white px-4 py-5 text-left shadow-[0_12px_30px_rgba(15,23,42,0.08)] transition hover:-translate-y-0.5"
+      >
+        <GripVertical className="size-5 text-[#9ca3af]" />
+        <div className="min-w-0 flex-1">
+          <p className="text-2xl font-semibold tracking-[-0.05em] text-[#111827]">{title}</p>
+          <p className="mt-2 truncate text-base text-[#64748b]">{subtitle}</p>
+        </div>
+        <MoreVertical className="size-5 text-[#111827]" />
+      </button>
+    );
   }
 
   return (
-    <PageFrame className="gap-5">
-      <StrongSurface className="overflow-hidden rounded-[24px] p-0">
-        <div className="relative min-h-[340px]">
-          <img src={currentHeroImage} alt={selectedWorkout.title} className="absolute inset-0 h-full w-full object-cover" />
-          <div className="cinema-overlay absolute inset-0" />
-          <div className="relative flex min-h-[340px] flex-col justify-between p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-white/80">
-                treino atual
-              </div>
-              <AnimatePresence mode="wait">
-                {selectedWorkout.completed ? (
-                  <motion.div
-                    key="complete"
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    className="flex items-center gap-2 rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-[var(--accent)]"
-                  >
-                    <CheckCircle2 className="size-4" />
-                    concluido
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="progress"
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    className="rounded-full bg-black/35 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-white/72"
-                  >
-                    progresso em curso
-                  </motion.div>
-                )}
-              </AnimatePresence>
+    <section className="rounded-[34px] bg-[#f4f7fb] px-5 py-6 text-[#0f172a] shadow-[0_20px_60px_rgba(15,23,42,0.16)] sm:px-7">
+      {mode === "list" ? (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div>
+            <h1 className="text-[2rem] font-semibold tracking-[-0.06em]">Rotinas</h1>
+            <button type="button" className="mt-8 inline-flex items-center gap-3 text-base text-[#64748b]">
+              <ChevronDown className="size-4" />
+              As minhas rotinas ({routineWorkouts.length})
+            </button>
+            <div className="mt-4 space-y-4">
+              {routineWorkouts.map((routine) =>
+                renderRoutineCard(
+                  routine.id,
+                  routine.title.toLowerCase(),
+                  routine.exercises
+                    .map((item) => exerciseMap.get(item.exerciseId)?.name ?? "Exercicio")
+                    .slice(0, 3)
+                    .join(", "),
+                ),
+              )}
             </div>
+          </div>
 
-            <div className="space-y-5">
-              <div className="max-w-xl">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-white/60">{selectedWorkout.label}</p>
-                <h2 className="mt-2 text-4xl font-semibold tracking-[-0.08em]">{selectedWorkout.title}</h2>
-                <p className="mt-3 text-sm text-white/72">
-                  {formatDuration(selectedWorkout.durationMinutes)} / {selectedWorkout.exercises.length} exercicios / {selectedWorkout.muscleGroups.join(" / ")}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs text-white/68">
-                  <span>progresso visual</span>
-                  <span>{completionRatio}%</span>
+          <div className="space-y-4">
+            <button
+              type="button"
+              onClick={() => openBuilder()}
+              className="flex w-full items-center justify-between rounded-[28px] bg-white px-6 py-7 text-left shadow-[0_12px_30px_rgba(15,23,42,0.08)]"
+            >
+              <div className="flex items-center gap-4">
+                <div className="grid size-12 place-items-center rounded-[16px] bg-[#f1f5f9]">
+                  <NotebookPen className="size-5 text-[#111827]" />
                 </div>
-                <div className="h-1.5 rounded-full bg-white/10">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${completionRatio}%` }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
-                    className="h-full rounded-full bg-[var(--accent)]"
-                  />
+                <span className="text-2xl font-medium tracking-[-0.04em]">Nova rotina</span>
+              </div>
+              <ChevronRight className="size-5 text-[#64748b]" />
+            </button>
+            <div className="flex w-full items-center justify-between rounded-[28px] bg-white px-6 py-7 text-left shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+              <div className="flex items-center gap-4">
+                <div className="grid size-12 place-items-center rounded-[16px] bg-[#f1f5f9]">
+                  <FolderPlus className="size-5 text-[#111827]" />
                 </div>
+                <span className="text-2xl font-medium tracking-[-0.04em]">Nova pasta</span>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button variant={selectedWorkout.completed ? "secondary" : "primary"} onClick={() => toggleWorkoutCompleted(selectedWorkout.id)}>
-                  {selectedWorkout.completed ? "Treino concluido" : "Concluir treino"}
-                </Button>
-                <Button variant="secondary" onClick={() => duplicateWorkout(selectedWorkout.id)} className="gap-2">
-                  <Copy className="size-4" />
-                  Duplicar
-                </Button>
-                <Button variant="ghost" onClick={() => duplicateLastWeek()}>
-                  Repetir semana passada
-                </Button>
-              </div>
+              <ChevronRight className="size-5 text-[#64748b]" />
             </div>
           </div>
         </div>
-      </StrongSurface>
+      ) : null}
 
-      <div className="flex gap-3 overflow-x-auto pb-1">
-        {workouts.map((workout) => {
-          const cover = exercises.find((exercise) => exercise.id === workout.exercises[0]?.exerciseId)?.mediaUrl ?? currentHeroImage;
-
-          return (
-            <button
-              key={workout.id}
-              onClick={() => {
-                setQuickWorkout(workout.id);
-              }}
-              className={cn(
-                "relative min-h-[180px] min-w-[210px] overflow-hidden rounded-[20px] border border-white/7 text-left",
-                workout.id === selectedWorkout.id ? "ring-1 ring-[var(--accent)]" : "",
-              )}
-            >
-              <img src={cover} alt={workout.title} className="absolute inset-0 h-full w-full object-cover" />
-              <div className="cinema-overlay absolute inset-0" />
-              <div className="relative flex min-h-[180px] flex-col justify-between p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <span className="rounded-full bg-black/30 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] text-white/72">
-                    {workout.kind}
-                  </span>
-                  {workout.completed ? <CheckCircle2 className="size-4 text-[var(--accent)]" /> : null}
-                </div>
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-white/58">{workout.label}</p>
-                  <p className="mt-2 text-xl font-semibold tracking-[-0.05em]">{workout.title}</p>
-                  <p className="mt-2 text-sm text-white/72">{workout.muscleGroups.join(" / ")}</p>
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      <StrongSurface className="rounded-[22px]">
-        <SectionHeading eyebrow="smart builder" title="Criar treino por grupo muscular" />
-        <div className="mt-4 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="space-y-4">
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder="Ex: Upper focado em peito" />
-              <Input value={newDuration} onChange={(event) => setNewDuration(event.target.value)} placeholder="Duracao em minutos" />
+      {mode === "builder" ? (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_480px]">
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <button type="button" onClick={() => setMode("list")} className="inline-flex items-center gap-3 text-[2rem] font-semibold tracking-[-0.06em]">
+                <ArrowLeft className="size-7" />
+                Criar rotina
+              </button>
+              <Button
+                onClick={saveRoutine}
+                className="rounded-[14px] bg-[#c2c8d0] px-6 text-white hover:bg-[#9aa4b2]"
+                disabled={!routineTitle.trim() || selectedExercises.length === 0}
+              >
+                Guardar rotina
+              </Button>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {(["gym", "run", "swim"] as const).map((kind) => (
-                <Chip key={kind} active={newKind === kind} onClick={() => setNewKind(kind)}>
-                  {kind}
-                </Chip>
-              ))}
-            </div>
-
-            {newKind === "gym" ? (
-              <div className="space-y-3">
-                <p className="text-sm text-[var(--muted)]">
-                  Escolha grupos musculares e o sistema sugere exercicios com imagem, carga, reps, series e observacoes.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {muscleGroupOptions.map((group) => (
-                    <Chip key={group} active={newGroups.includes(group)} onClick={() => toggleGroup(group)}>
-                      {group}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-[16px] bg-white/4 p-4 text-sm text-[var(--muted)]">
-                Para corrida e natacao, crie um bloco rapido e deixe o feed receber a sessao depois.
-              </div>
-            )}
-
-            <div className="flex items-center gap-2 rounded-[16px] bg-white/4 px-4 py-3">
-              <Search className="size-4 text-[var(--muted)]" />
+            <div className="mt-8">
+              <p className="text-sm font-medium text-[#111827]">Titulo da rotina</p>
               <input
-                value={builderSearch}
-                onChange={(event) => setBuilderSearch(event.target.value)}
-                placeholder="Buscar exercicio dentro do construtor"
-                className="w-full bg-transparent text-sm text-white placeholder:text-[var(--muted)]"
+                value={routineTitle}
+                onChange={(event) => setRoutineTitle(event.target.value)}
+                placeholder="Titulo da rotina de treino"
+                className="mt-2 h-14 w-full rounded-[16px] border border-[#dbe2ea] bg-white px-5 text-lg text-[#111827] placeholder:text-[#94a3b8]"
               />
             </div>
 
-            <div className="rounded-[18px] bg-white/4 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">selecionados</p>
-                  <p className="mt-2 text-lg font-semibold">{builderSelectionCount} exercicios no treino</p>
+            <div className="mt-6 min-h-[420px] rounded-[28px] bg-white p-8 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+              {selectedExercises.length === 0 ? (
+                <div className="flex h-full min-h-[320px] flex-col items-center justify-center text-center">
+                  <div className="grid size-16 place-items-center rounded-full bg-[#f1f5f9] text-[#94a3b8]">
+                    <NotebookPen className="size-8" />
+                  </div>
+                  <p className="mt-6 text-3xl font-semibold tracking-[-0.05em]">Nenhum exercicio</p>
+                  <p className="mt-3 max-w-md text-lg text-[#64748b]">Ate agora, nao adicionaste nenhum exercicio a esta rotina.</p>
                 </div>
-                <Button onClick={handleCreateWorkout} className="gap-2" disabled={!newTitle.trim() || (newKind === "gym" && builderSelectionCount === 0)}>
-                  <Plus className="size-4" />
-                  Criar treino
-                </Button>
-              </div>
+              ) : (
+                <div className="space-y-4">
+                  {selectedExercises.map((item) => {
+                    const exercise = exerciseMap.get(item.exerciseId);
+                    if (!exercise) {
+                      return null;
+                    }
+
+                    return (
+                      <div key={item.exerciseId} className="rounded-[24px] border border-[#e2e8f0] p-5">
+                        <div className="flex flex-wrap items-start gap-4">
+                          <img src={exercise.mediaUrl} alt={exercise.name} className="size-16 rounded-full object-cover" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-2xl font-semibold tracking-[-0.05em]">{exercise.name}</p>
+                            <p className="mt-1 text-base text-[#64748b]">{exercise.muscle}</p>
+                          </div>
+                          <button type="button" onClick={() => removeExerciseFromDraft(item.exerciseId)} className="text-[#ef4444]">
+                            <Trash2 className="size-5" />
+                          </button>
+                        </div>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          <input
+                            value={String(item.sets)}
+                            onChange={(event) => updateDraftExercise(item.exerciseId, { sets: Number(event.target.value || 0) })}
+                            placeholder="Series"
+                            className="h-12 rounded-[14px] border border-[#dbe2ea] px-4"
+                          />
+                          <input
+                            value={item.reps}
+                            onChange={(event) => updateDraftExercise(item.exerciseId, { reps: event.target.value })}
+                            placeholder="Reps"
+                            className="h-12 rounded-[14px] border border-[#dbe2ea] px-4"
+                          />
+                          <input
+                            value={item.weight}
+                            onChange={(event) => updateDraftExercise(item.exerciseId, { weight: event.target.value })}
+                            placeholder="Carga"
+                            className="h-12 rounded-[14px] border border-[#dbe2ea] px-4"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="space-y-3">
-            {builderCandidates.length ? (
-              builderCandidates.map((exercise) => (
-                <BuilderExerciseCard
-                  key={exercise.id}
-                  exercise={exercise}
-                  selected={Boolean(builderExercises[exercise.id])}
-                  config={builderExercises[exercise.id]}
-                  onToggle={() => toggleBuilderExercise(exercise.id)}
-                  onChange={(patch) =>
-                    setBuilderExercises((state) => ({
-                      ...state,
-                      [exercise.id]: {
-                        ...state[exercise.id],
-                        ...patch,
-                      },
-                    }))
-                  }
-                />
-              ))
-            ) : (
-              <div className="rounded-[18px] border border-dashed border-white/10 bg-white/3 p-6 text-sm text-[var(--muted)]">
-                Selecione grupos musculares para liberar sugestoes relacionadas.
+          <div className="space-y-5">
+            <div className="rounded-[24px] bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-2xl font-semibold tracking-[-0.05em]">Resumo</p>
+                  <div className="mt-3 flex gap-8 text-lg">
+                    <div>
+                      <p className="text-[#64748b]">Exercicios</p>
+                      <p className="text-3xl">{selectedExercises.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-[#64748b]">Total de series</p>
+                      <p className="text-3xl">{selectedExercises.reduce((total, item) => total + item.sets, 0)}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-[18px] bg-[#f8fafc] px-4 py-3 text-sm text-[#64748b]">
+                  {sessionUser?.name ?? "Usuario"}
+                </div>
               </div>
-            )}
+            </div>
+
+            <div className="rounded-[24px] bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-2xl font-semibold tracking-[-0.05em]">Biblioteca</p>
+                <button type="button" onClick={() => setCustomModalOpen(true)} className="inline-flex items-center gap-2 text-base text-[#0ea5e9]">
+                  <CirclePlus className="size-4" />
+                  Exercicio personalizado
+                </button>
+              </div>
+
+              <select
+                value={equipmentFilter}
+                onChange={(event) => setEquipmentFilter(event.target.value)}
+                className="mt-5 h-12 w-full rounded-[14px] border border-[#dbe2ea] px-4"
+              >
+                {allEquipments.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={muscleFilter}
+                onChange={(event) => setMuscleFilter(event.target.value)}
+                className="mt-3 h-12 w-full rounded-[14px] border border-[#dbe2ea] px-4"
+              >
+                {allMuscles.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+
+              <div className="mt-3 flex items-center gap-3 rounded-[14px] bg-[#f1f5f9] px-4">
+                <Search className="size-5 text-[#94a3b8]" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Procurar exercicios"
+                  className="h-12 w-full bg-transparent text-base outline-none placeholder:text-[#94a3b8]"
+                />
+              </div>
+
+              <div className="mt-6 max-h-[540px] space-y-3 overflow-y-auto pr-1">
+                {filteredExercises.map((exercise) => (
+                  <div key={exercise.id} className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => addExerciseToDraft(exercise.id)}
+                      className="grid size-8 shrink-0 place-items-center rounded-full bg-[#1d9bf0] text-white"
+                    >
+                      <CirclePlus className="size-5" />
+                    </button>
+                    <img src={exercise.mediaUrl} alt={exercise.name} className="size-14 rounded-full object-cover" />
+                    <div className="min-w-0">
+                      <p className="truncate text-xl font-medium tracking-[-0.04em]">{exercise.name}</p>
+                      <p className="text-base text-[#64748b]">{exercise.muscle}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      </StrongSurface>
+      ) : null}
 
-      <Surface className="rounded-[22px]">
-        <SectionHeading eyebrow="in session" title="Exercicios do treino atual" />
-        <Input
-          className="mt-4"
-          value={selectedWorkout.quickNote ?? ""}
-          onChange={(event) => addWorkoutNote(selectedWorkout.id, event.target.value)}
-          placeholder="Observacao geral do treino"
-        />
+      {mode === "detail" && selectedRoutine ? (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div>
+            <button type="button" onClick={() => setMode("list")} className="inline-flex items-center gap-3 text-[2rem] font-semibold tracking-[-0.06em]">
+              <ArrowLeft className="size-7" />
+              {selectedRoutine.title.toLowerCase()}
+            </button>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={(event) => {
-            const { active, over } = event;
-            if (!over || active.id === over.id) {
-              return;
-            }
+            <div className="mt-6 rounded-[28px] bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+              <div className="space-y-5">
+                {selectedRoutine.exercises.map((item) => {
+                  const exercise = exerciseMap.get(item.exerciseId);
+                  if (!exercise) {
+                    return null;
+                  }
 
-            const items = selectedWorkout.exercises.map((exercise) => exercise.exerciseId);
-            const oldIndex = items.indexOf(String(active.id));
-            const newIndex = items.indexOf(String(over.id));
-            reorderWorkoutExercises(selectedWorkout.id, arrayMove(items, oldIndex, newIndex));
-          }}
-        >
-          <SortableContext items={selectedWorkout.exercises.map((exercise) => exercise.exerciseId)} strategy={verticalListSortingStrategy}>
-            <div className="mt-4 space-y-3">
-              {selectedWorkoutDetails?.map(({ detail, record }, index) => (
-                <WorkoutExerciseCard
-                  key={record.exerciseId}
-                  id={record.exerciseId}
-                  detail={detail}
-                  exercise={record}
-                  index={index}
-                  total={selectedWorkout.exercises.length}
-                  onChange={(patch) => updateWorkoutExercise(selectedWorkout.id, record.exerciseId, patch)}
-                />
-              ))}
+                  return (
+                    <div key={item.exerciseId} className="flex items-center gap-4">
+                      <img src={exercise.mediaUrl} alt={exercise.name} className="size-16 rounded-full object-cover" />
+                      <div>
+                        <p className="text-2xl font-semibold tracking-[-0.05em]">{exercise.name}</p>
+                        <p className="mt-1 text-lg">{item.sets} set</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </SortableContext>
-        </DndContext>
-      </Surface>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Surface className="rounded-[20px]">
-          <SectionHeading eyebrow="favoritos" title="Adicionar rapido" />
-          <div className="mt-4 space-y-3">
-            {favoriteExercises.map((exercise) => (
-              <button
-                key={exercise.id}
-                onClick={() => addExercisesToWorkout(selectedWorkout.id, [exercise.id])}
-                className="flex w-full items-center gap-3 rounded-[16px] bg-white/4 p-3 text-left transition hover:bg-white/6"
-              >
-                <img src={exercise.mediaUrl} alt={exercise.name} className="size-14 rounded-[14px] object-cover" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{exercise.name}</p>
-                  <p className="mt-1 text-xs text-[var(--muted)]">{exercise.muscle}</p>
-                </div>
-                <Plus className="size-4 text-[var(--accent)]" />
-              </button>
-            ))}
           </div>
-        </Surface>
 
-        <Surface className="rounded-[20px]">
-          <SectionHeading eyebrow="recentes" title="Sugestoes quentes" />
-          <div className="mt-4 space-y-3">
-            {recentExercises.map((exercise) => (
-              <button
-                key={exercise.id}
-                onClick={() => addExercisesToWorkout(selectedWorkout.id, [exercise.id])}
-                className="flex w-full items-center gap-3 rounded-[16px] bg-white/4 p-3 text-left transition hover:bg-white/6"
-              >
-                <img src={exercise.mediaUrl} alt={exercise.name} className="size-14 rounded-[14px] object-cover" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{exercise.name}</p>
-                  <p className="mt-1 text-xs text-[var(--muted)]">{exercise.equipment}</p>
+          <div className="space-y-4">
+            <div className="rounded-[28px] bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+              <div className="flex items-center gap-4">
+                {sessionUser?.avatarImage ? (
+                  <img src={sessionUser.avatarImage} alt={sessionUser.name} className="size-14 rounded-full object-cover" />
+                ) : (
+                  <div className="grid size-14 place-items-center rounded-full bg-[#e5e7eb] text-lg font-semibold text-[#64748b]">
+                    {sessionUser?.avatar ?? "PS"}
+                  </div>
+                )}
+                <div>
+                  <p className="text-base text-[#64748b]">Criada por</p>
+                  <p className="text-2xl font-semibold tracking-[-0.05em]">{sessionUser?.username?.replace(/^@/, "") ?? sessionUser?.name ?? "usuario"}</p>
                 </div>
-                <Plus className="size-4 text-[var(--accent)]" />
-              </button>
-            ))}
-          </div>
-        </Surface>
-      </div>
+              </div>
+              <Button onClick={() => openBuilder(selectedRoutine.id)} className="mt-5 w-full rounded-[14px] bg-[#1d9bf0] text-white">
+                Editar rotina
+              </Button>
+              <Button variant="secondary" className="mt-3 w-full rounded-[14px] bg-[#f1f5f9] text-[#111827] hover:bg-[#e2e8f0]">
+                Copiar ligacao da rotina
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  deleteWorkoutRoutine(selectedRoutine.id);
+                  setMode("list");
+                }}
+                className="mt-3 w-full rounded-[14px] text-[#ef4444] hover:bg-[#fee2e2]"
+              >
+                Excluir rotina
+              </Button>
+            </div>
 
-      <Surface className="flex items-center gap-3 rounded-[18px] bg-white/4">
-        <Sparkles className="size-4 text-[var(--accent)]" />
-        <p className="text-sm text-[var(--muted)]">
-          Biblioteca removida da navegação. Agora o treino nasce dentro do construtor com imagem, carga, reps, series e observacoes.
-        </p>
-      </Surface>
-    </PageFrame>
+            <div className="rounded-[28px] bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+              <p className="text-2xl font-semibold tracking-[-0.05em]">Resumo da rotina</p>
+              <div className="mt-5 grid grid-cols-3 gap-3 text-base">
+                <div>
+                  <p className="text-[#64748b]">Exercicios</p>
+                  <p className="text-3xl">{selectedRoutine.exercises.length}</p>
+                </div>
+                <div>
+                  <p className="text-[#64748b]">Total de series</p>
+                  <p className="text-3xl">{selectedRoutine.exercises.reduce((total, item) => total + item.sets, 0)}</p>
+                </div>
+                <div>
+                  <p className="text-[#64748b]">Duracao estimada</p>
+                  <p className="text-3xl">{selectedRoutine.durationMinutes} min</p>
+                </div>
+              </div>
+
+              <div className="mt-6 rounded-[20px] bg-[#f8fafc] p-4">
+                {selectedRoutine.muscleGroups.slice(0, 3).map((muscle, index) => (
+                  <div key={muscle} className="mt-3 first:mt-0">
+                    <div className="flex items-center justify-between text-base">
+                      <span className="capitalize">{muscle}</span>
+                      <span>{Math.max(1, selectedRoutine.exercises.length - index)}</span>
+                    </div>
+                    <div className="mt-2 h-5 rounded-full bg-[#dbeafe]">
+                      <div
+                        className="h-5 rounded-full bg-[#1d9bf0]"
+                        style={{ width: `${Math.max(35, 100 - index * 20)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {customModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-2xl rounded-[26px] bg-white p-6 text-[#111827] shadow-[0_24px_80px_rgba(15,23,42,0.26)]">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-[2rem] font-semibold tracking-[-0.05em]">Criar exercicio personalizado</h2>
+              <button type="button" onClick={() => setCustomModalOpen(false)}>
+                <X className="size-6" />
+              </button>
+            </div>
+
+            <div className="mt-6 flex flex-col items-center border-t border-[#e5e7eb] pt-6">
+              <label className="grid size-32 cursor-pointer place-items-center rounded-full bg-[#f8fafc] text-[#94a3b8]">
+                {customExercise.imageDataUrl ? (
+                  <img src={customExercise.imageDataUrl} alt="Preview" className="size-32 rounded-full object-cover" />
+                ) : (
+                  <ImagePlus className="size-10" />
+                )}
+                <input type="file" accept="image/*" onChange={handleCustomImage} className="hidden" />
+              </label>
+              <label className="mt-4 inline-flex cursor-pointer rounded-[14px] bg-[#eef2f7] px-5 py-3 text-lg">
+                Adicionar imagem
+                <input type="file" accept="image/*" onChange={handleCustomImage} className="hidden" />
+              </label>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              <div>
+                <p className="mb-2 text-base font-medium">Nome do exercicio</p>
+                <Input
+                  value={customExercise.name}
+                  onChange={(event) => setCustomExercise((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Introduz o nome do exercicio..."
+                  className="h-12 rounded-[14px] border border-[#dbe2ea] bg-white text-[#111827] placeholder:text-[#94a3b8]"
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="mb-2 text-base font-medium">Tipo de Exercicio</p>
+                  <Input
+                    value={customExercise.type}
+                    onChange={(event) => setCustomExercise((current) => ({ ...current, type: event.target.value }))}
+                    placeholder="Select..."
+                    className="h-12 rounded-[14px] border border-[#dbe2ea] bg-white text-[#111827] placeholder:text-[#94a3b8]"
+                  />
+                </div>
+                <div>
+                  <p className="mb-2 text-base font-medium">Equipamento</p>
+                  <Input
+                    value={customExercise.equipment}
+                    onChange={(event) => setCustomExercise((current) => ({ ...current, equipment: event.target.value }))}
+                    placeholder="Select..."
+                    className="h-12 rounded-[14px] border border-[#dbe2ea] bg-white text-[#111827] placeholder:text-[#94a3b8]"
+                  />
+                </div>
+                <div>
+                  <p className="mb-2 text-base font-medium">Grupo Muscular Primario</p>
+                  <Input
+                    value={customExercise.primaryMuscle}
+                    onChange={(event) => setCustomExercise((current) => ({ ...current, primaryMuscle: event.target.value }))}
+                    placeholder="Select..."
+                    className="h-12 rounded-[14px] border border-[#dbe2ea] bg-white text-[#111827] placeholder:text-[#94a3b8]"
+                  />
+                </div>
+                <div>
+                  <p className="mb-2 text-base font-medium">Outros Musculos</p>
+                  <Input
+                    value={customExercise.otherMuscles}
+                    onChange={(event) => setCustomExercise((current) => ({ ...current, otherMuscles: event.target.value }))}
+                    placeholder="Select..."
+                    className="h-12 rounded-[14px] border border-[#dbe2ea] bg-white text-[#111827] placeholder:text-[#94a3b8]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-end">
+              <Button
+                onClick={createCustomExercise}
+                className="rounded-[14px] bg-[#c2c8d0] px-6 text-white hover:bg-[#9aa4b2]"
+                disabled={!customExercise.name.trim() || !customExercise.primaryMuscle.trim()}
+              >
+                Criar exercicio
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }

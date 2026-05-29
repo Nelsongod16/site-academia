@@ -8,19 +8,20 @@ import { useAppStore } from "@/store/app-store";
 
 export function useScrollMemory() {
   const pathname = usePathname();
+  const currentPath = pathname ?? "/";
   const rememberScroll = useStore(useAppStore, (state) => state.rememberScroll);
   const scrollMemory = useStore(useAppStore, (state) => state.scrollMemory);
 
   const saveScroll = useEffectEvent(() => {
-    rememberScroll(pathname, window.scrollY);
+    rememberScroll(currentPath, window.scrollY);
   });
 
   useEffect(() => {
-    const saved = scrollMemory[pathname];
+    const saved = scrollMemory[currentPath];
     if (typeof saved === "number") {
       window.requestAnimationFrame(() => window.scrollTo({ top: saved }));
     }
-  }, [pathname, scrollMemory]);
+  }, [currentPath, scrollMemory]);
 
   useEffect(() => {
     const handleScroll = () => saveScroll();

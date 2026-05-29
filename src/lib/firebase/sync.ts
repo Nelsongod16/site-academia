@@ -1,29 +1,54 @@
-import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-
-import { getFirebaseServices } from "@/lib/firebase/client";
+import { getSupabaseClient } from "@/lib/firebase/client";
 import type { SharedSnapshot } from "@/types/app";
 
-const ROOM_ID = "pulse-shared-room";
+function mapSnapshotRow(row: { data: SharedSnapshot | null } | null) {
+  return row?.data ?? null;
+}
 
-export function subscribeSharedSnapshot(callback: (snapshot: SharedSnapshot | null) => void) {
-  const services = getFirebaseServices();
+export function subscribeSharedSnapshot(userId: string, callback: (snapshot: SharedSnapshot | null) => void) {
+  const supabase = getSupabaseClient();
 
-  if (!services) {
+  if (!supabase) {
     callback(null);
     return () => undefined;
   }
 
-  const ref = doc(services.db, "spaces", ROOM_ID);
-  return onSnapshot(ref, (snapshot) => callback(snapshot.exists() ? (snapshot.data() as SharedSnapshot) : null));
+  const fetchCurrent = async () => {
+    const { data } = await supabase.from("user_snapshots").select("data").eq("user_id", userId).maybeSingle();
+    callback(mapSnapshotRow(data as { data: SharedSnapshot | null } | null));
+  };
+
+  void fetchCurrent();
+
+  const channel = supabase
+    .channel(`user-snapshot-${userId}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "user_snapshots", filter: `user_id=eq.${userId}` }, () => {
+      void fetchCurrent();
+    })
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
 }
 
-export async function saveSharedSnapshot(snapshot: SharedSnapshot) {
-  const services = getFirebaseServices();
+export async function saveSharedSnapshot(userId: string, snapshot: SharedSnapshot) {
+  const supabase = getSupabaseClient();
 
-  if (!services) {
+  if (!supabase) {
     return;
   }
 
-  const ref = doc(services.db, "spaces", ROOM_ID);
-  await setDoc(ref, { ...snapshot, updatedAt: serverTimestamp() }, { merge: true });
+  const { error } = await supabase.from("user_snapshots").upsert(
+    {
+      user_id: userId,
+      data: snapshot,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" },
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }

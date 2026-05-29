@@ -30,7 +30,7 @@ export function useRealtimeSync() {
       return;
     }
 
-    const unsubscribe = subscribeSharedSnapshot((remote) => {
+    const unsubscribe = subscribeSharedSnapshot(sessionUser.id, (remote) => {
       if (!remote) {
         return;
       }
@@ -53,7 +53,7 @@ export function useRealtimeSync() {
     }
 
     const timer = window.setTimeout(() => {
-      void saveSharedSnapshot(snapshot);
+      void saveSharedSnapshot(sessionUser.id, snapshot);
     }, 600);
 
     return () => window.clearTimeout(timer);

@@ -1,171 +1,171 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo } from "react";
 import { useStore } from "zustand";
 
 import { PageFrame } from "@/components/layout/page-frame";
+import { SocialPostCard } from "@/components/social/social-post-card";
 import { Button, SectionHeading, StrongSurface, Surface } from "@/components/ui/kit";
-import { currentStreak, monthlyRunDistance, totalMinutes } from "@/lib/stats";
-import { formatDuration } from "@/lib/utils";
+import { useCurrentSocialState, useProfilePosts } from "@/hooks/use-social-session";
+import { hasFirebaseConfig } from "@/lib/firebase/client";
+import { currentStreak, totalMinutes } from "@/lib/stats";
 import { useAppStore } from "@/store/app-store";
+import type { SocialProfile } from "@/types/social";
+
+function createLocalProfile(sessionUser: ReturnType<typeof useAppStore.getState>["sessionUser"]): SocialProfile | null {
+  if (!sessionUser) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+
+  return {
+    id: sessionUser.id,
+    email: sessionUser.email,
+    fullName: sessionUser.name,
+    username: sessionUser.username ?? `@${sessionUser.email.split("@")[0]}`,
+    usernameKey: (sessionUser.username ?? sessionUser.email.split("@")[0]).replace(/^@/, "").toLowerCase(),
+    avatarUrl: sessionUser.avatarImage ?? "",
+    bio: sessionUser.bio ?? "Perfil local pronto para acompanhar seus treinos.",
+    city: sessionUser.city ?? "Sao Paulo",
+    country: sessionUser.country ?? "Brasil",
+    fitnessGoal: sessionUser.fitnessGoal ?? "consistencia",
+    trainingStyles: sessionUser.trainingStyles ?? ["musculacao"],
+    age: sessionUser.age ?? 25,
+    birthDate: sessionUser.birthDate ?? "",
+    weightKg: sessionUser.weightKg ?? 70,
+    heightCm: sessionUser.heightCm ?? 170,
+    sex: sessionUser.sex ?? "nao-informar",
+    visibility: sessionUser.visibility ?? "public",
+    verifiedEmail: Boolean(sessionUser.emailVerified ?? true),
+    profileCompleted: Boolean(sessionUser.profileCompleted ?? true),
+    accountStatus: "active",
+    moderationState: "clean",
+    createdAt: now,
+    updatedAt: now,
+    lastActiveAt: now,
+    searchIndex: [],
+  };
+}
 
 export function ProfileScreen() {
+  const socialReady = hasFirebaseConfig();
   const sessionUser = useStore(useAppStore, (state) => state.sessionUser);
+  const feedPosts = useStore(useAppStore, (state) => state.feedPosts);
   const workouts = useStore(useAppStore, (state) => state.workouts);
-  const runs = useStore(useAppStore, (state) => state.runs);
   const photos = useStore(useAppStore, (state) => state.photos);
-  const profiles = useStore(useAppStore, (state) => state.profiles);
-  const toggleFollowProfile = useStore(useAppStore, (state) => state.toggleFollowProfile);
-  const toggleFriendProfile = useStore(useAppStore, (state) => state.toggleFriendProfile);
+  const { profile, stats } = useCurrentSocialState();
+  const posts = useProfilePosts(profile?.id);
 
-  const currentProfile = profiles.find((profile) => profile.id === sessionUser?.id) ?? profiles[0];
-  const communityProfiles = profiles.filter((profile) => profile.id !== currentProfile?.id);
-  const streak = useMemo(() => currentStreak(workouts), [workouts]);
-  const minutes = useMemo(() => totalMinutes(workouts), [workouts]);
-  const runKm = useMemo(() => monthlyRunDistance(runs), [runs]);
-  const latestWorkout = workouts.find((workout) => workout.completed) ?? workouts[0];
-  const recentPhotos = photos.filter((photo) => photo.authorId === currentProfile?.id).slice(0, 2);
+  const activeProfile = socialReady ? profile : createLocalProfile(sessionUser);
+  const localStreak = useMemo(() => currentStreak(workouts), [workouts]);
+  const localMinutes = useMemo(() => totalMinutes(workouts), [workouts]);
+  const recentPhotos = useMemo(() => photos.slice(0, 3), [photos]);
+  const localFeedPosts = useMemo(() => feedPosts.filter((post) => post.authorId === sessionUser?.id), [feedPosts, sessionUser?.id]);
+
+  if (!activeProfile) {
+    return (
+      <PageFrame>
+        <StrongSurface className="rounded-[28px]">
+          <h2 className="text-3xl font-semibold tracking-[-0.07em]">Complete seu perfil para liberar a area publica.</h2>
+          <p className="mt-3 text-sm text-[var(--muted)]">Assim que o onboarding for concluido, suas estatisticas e seus posts vao aparecer aqui.</p>
+        </StrongSurface>
+      </PageFrame>
+    );
+  }
 
   return (
     <PageFrame className="gap-5">
-      <StrongSurface className="overflow-hidden rounded-[24px] p-0">
-        <div className="relative min-h-[360px]">
-          <img src={currentProfile?.coverImage} alt={currentProfile?.name ?? "Perfil"} className="absolute inset-0 h-full w-full object-cover" />
-          <div className="cinema-overlay absolute inset-0" />
-          <div className="relative flex min-h-[360px] flex-col justify-between p-5">
+      <StrongSurface className="overflow-hidden rounded-[30px] p-0">
+        <div className="relative min-h-[380px]">
+          {activeProfile.avatarUrl ? <img src={activeProfile.avatarUrl} alt={activeProfile.fullName} className="absolute inset-0 h-full w-full object-cover" /> : null}
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,9,12,0.08)_0%,rgba(6,9,12,0.28)_38%,rgba(6,9,12,0.92)_100%)]" />
+          <div className="relative flex min-h-[380px] flex-col justify-between p-5 md:p-6">
             <div className="flex items-start justify-between gap-3">
-              <div className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.24em] text-white/78">
-                public profile
-              </div>
-              <div className="rounded-full bg-black/30 px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-white/68">
-                {currentProfile?.city}
-              </div>
+              <div className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] uppercase tracking-[0.24em] text-white/72">meu perfil</div>
+              <Link href="/settings">
+                <Button variant="secondary">Editar perfil</Button>
+              </Link>
             </div>
 
             <div className="space-y-5">
               <div className="flex items-end gap-4">
-                <img src={currentProfile?.avatarImage} alt={currentProfile?.name} className="size-20 rounded-[22px] border border-white/10 object-cover" />
+                {activeProfile.avatarUrl ? (
+                  <img src={activeProfile.avatarUrl} alt={activeProfile.fullName} className="size-24 rounded-[26px] border border-white/10 object-cover" />
+                ) : (
+                  <div className="flex size-24 items-center justify-center rounded-[26px] border border-white/10 bg-white/10 text-3xl font-semibold">
+                    {sessionUser?.avatar ?? "PS"}
+                  </div>
+                )}
                 <div className="min-w-0">
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-white/60">{currentProfile?.handle}</p>
-                  <h2 className="mt-2 text-4xl font-semibold tracking-[-0.08em]">{currentProfile?.name}</h2>
-                  <p className="mt-2 max-w-xl text-sm leading-6 text-white/74">{currentProfile?.bio ?? sessionUser?.bio}</p>
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-white/60">{activeProfile.username}</p>
+                  <h2 className="mt-2 text-4xl font-semibold tracking-[-0.08em]">{activeProfile.fullName}</h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-white/74">{activeProfile.bio || "Seu perfil social esta pronto para acompanhar evolucao e conexoes."}</p>
+                  <p className="mt-3 text-xs uppercase tracking-[0.18em] text-white/58">
+                    {activeProfile.city}, {activeProfile.country} · {activeProfile.fitnessGoal}
+                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                <div className="rounded-[16px] bg-black/26 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-white/60">seguidores</p>
-                  <p className="metric-number mt-2 text-xl">{currentProfile?.followers ?? 0}</p>
-                </div>
-                <div className="rounded-[16px] bg-black/26 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-white/60">seguindo</p>
-                  <p className="metric-number mt-2 text-xl">{currentProfile?.following ?? 0}</p>
-                </div>
-                <div className="rounded-[16px] bg-black/26 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-white/60">streak</p>
-                  <p className="metric-number mt-2 text-xl">{Math.max(streak, currentProfile?.streak ?? 0)}x</p>
-                </div>
-                <div className="rounded-[16px] bg-black/26 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-white/60">corrida mes</p>
-                  <p className="metric-number mt-2 text-xl">{runKm.toFixed(1)} km</p>
-                </div>
+              <div className="flex flex-wrap gap-3">
+                <Button disabled>Mensagem futura</Button>
+                <Button variant="secondary" disabled>
+                  Seguir futura expansao
+                </Button>
               </div>
             </div>
           </div>
         </div>
       </StrongSurface>
 
-      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <Surface className="rounded-[20px]">
-          <SectionHeading eyebrow="highlights" title="Conquistas e ultima sessao" />
-          <div className="mt-4 space-y-4">
-            <div className="grid gap-2">
-              {currentProfile?.achievements.map((achievement) => (
-                <div key={achievement.title} className="rounded-[16px] bg-white/4 px-4 py-3">
-                  <p className="text-sm font-medium">{achievement.title}</p>
-                  <p className="mt-1 text-xs text-[var(--muted)]">{achievement.detail}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="rounded-[16px] bg-white/4 p-4">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">ultimo treino</p>
-              <p className="mt-2 text-lg font-semibold">{latestWorkout?.title}</p>
-              <p className="mt-2 text-sm text-[var(--muted)]">{latestWorkout?.quickNote ?? currentProfile?.lastWorkout}</p>
-            </div>
-
-            <div className="rounded-[16px] bg-white/4 p-4">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">frequencia semanal</p>
-              <p className="metric-number mt-2 text-2xl">{currentProfile?.weeklyFrequency ?? 0}x</p>
-              <p className="mt-2 text-sm text-[var(--muted)]">{formatDuration(minutes)} acumulados no ciclo atual.</p>
-            </div>
-          </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Surface className="rounded-[22px]">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">peso atual</p>
+          <p className="metric-number mt-2 text-3xl">{stats?.currentWeightKg ?? activeProfile.weightKg} kg</p>
         </Surface>
-
-        <Surface className="rounded-[20px]">
-          <SectionHeading eyebrow="community" title="Atletas conectados" />
-          <div className="mt-4 space-y-3">
-            {communityProfiles.map((profile) => (
-              <div key={profile.id} className="overflow-hidden rounded-[18px] border border-white/6 bg-white/[0.03]">
-                <div className="grid md:grid-cols-[140px_1fr]">
-                  <img src={profile.coverImage} alt={profile.name} className="h-full min-h-[164px] w-full object-cover" />
-                  <div className="space-y-4 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <img src={profile.avatarImage} alt={profile.name} className="size-14 rounded-[16px] object-cover" />
-                        <div>
-                          <p className="text-base font-semibold">{profile.name}</p>
-                          <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">{profile.handle}</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button variant={profile.isFollowing ? "primary" : "secondary"} onClick={() => toggleFollowProfile(profile.id)}>
-                          {profile.isFollowing ? "Seguindo" : "Seguir"}
-                        </Button>
-                        <Button variant={profile.isFriend ? "primary" : "ghost"} onClick={() => toggleFriendProfile(profile.id)}>
-                          {profile.isFriend ? "Amigo" : "Adicionar"}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <p className="text-sm leading-6 text-[var(--muted)]">{profile.bio}</p>
-
-                    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                      <div className="rounded-[14px] bg-white/4 px-3 py-3">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">streak</p>
-                        <p className="metric-number mt-2 text-lg">{profile.streak}x</p>
-                      </div>
-                      <div className="rounded-[14px] bg-white/4 px-3 py-3">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">semana</p>
-                        <p className="metric-number mt-2 text-lg">{profile.weeklyFrequency}x</p>
-                      </div>
-                      <div className="rounded-[14px] bg-white/4 px-3 py-3">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">corridas</p>
-                        <p className="metric-number mt-2 text-lg">{profile.totalRuns}</p>
-                      </div>
-                      <div className="rounded-[14px] bg-white/4 px-3 py-3">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">seguidores</p>
-                        <p className="metric-number mt-2 text-lg">{profile.followers}</p>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[16px] bg-white/4 p-4">
-                      <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">ultimo treino</p>
-                      <p className="mt-2 text-sm">{profile.lastWorkout}</p>
-                      <p className="mt-3 text-xs text-[var(--muted)]">{profile.lastRun}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+        <Surface className="rounded-[22px]">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">evolucao</p>
+          <p className="metric-number mt-2 text-3xl">{stats?.evolutionKg ?? 0} kg</p>
+        </Surface>
+        <Surface className="rounded-[22px]">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">dias treinados</p>
+          <p className="metric-number mt-2 text-3xl">{stats?.trainedDays ?? 0}</p>
+        </Surface>
+        <Surface className="rounded-[22px]">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">sequencia</p>
+          <p className="metric-number mt-2 text-3xl">{Math.max(stats?.currentStreak ?? 0, localStreak)}</p>
         </Surface>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Surface className="rounded-[20px]">
-          <SectionHeading eyebrow="visual progress" title="Fotos recentes" />
-          <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+        <Surface className="rounded-[24px]">
+          <SectionHeading eyebrow="resumo" title="Volume e favoritos" />
+          <div className="mt-4 space-y-3">
+            <div className="rounded-[18px] bg-white/4 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">exercicios favoritos</p>
+              <p className="mt-2 text-sm text-white/78">{stats?.favoriteExercises.join(" · ") || "Marque favoritos na aba de treinos para aparecer aqui."}</p>
+            </div>
+            <div className="rounded-[18px] bg-white/4 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">carga maxima</p>
+              <p className="metric-number mt-2 text-3xl">{stats?.maxLoadKg ?? 0} kg</p>
+            </div>
+            <div className="rounded-[18px] bg-white/4 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">tempo treinando</p>
+              <p className="metric-number mt-2 text-3xl">{Math.max(stats?.trainingMinutes ?? 0, localMinutes)} min</p>
+            </div>
+            <div className="rounded-[18px] bg-white/4 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">posts e amigos</p>
+              <p className="mt-2 text-sm text-white/78">
+                {stats?.postsCount ?? (socialReady ? posts.length : localFeedPosts.length)} posts · {stats?.friendsCount ?? 0} amigos
+              </p>
+            </div>
+          </div>
+        </Surface>
+
+        <Surface className="rounded-[24px]">
+          <SectionHeading eyebrow="progresso visual" title="Fotos recentes" />
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
             {recentPhotos.map((photo) => (
               <div key={photo.id} className="overflow-hidden rounded-[18px] bg-white/4">
                 <img src={photo.image} alt={photo.label} className="h-44 w-full object-cover" />
@@ -175,26 +175,38 @@ export function ProfileScreen() {
                 </div>
               </div>
             ))}
+            {recentPhotos.length === 0 ? (
+              <div className="rounded-[18px] border border-dashed border-white/8 p-4 text-sm text-[var(--muted)]">
+                Suas fotos de progresso vao aparecer aqui assim que forem adicionadas.
+              </div>
+            ) : null}
           </div>
         </Surface>
+      </div>
 
-        <Surface className="rounded-[20px]">
-          <SectionHeading eyebrow="social summary" title="Volume publico" />
-          <div className="mt-4 space-y-3">
-            <div className="rounded-[16px] bg-white/4 p-4">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">treinos concluidos</p>
-              <p className="metric-number mt-2 text-3xl">{workouts.filter((workout) => workout.completed).length}</p>
-            </div>
-            <div className="rounded-[16px] bg-white/4 p-4">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">tempo total</p>
-              <p className="metric-number mt-2 text-3xl">{formatDuration(minutes)}</p>
-            </div>
-            <div className="rounded-[16px] bg-white/4 p-4">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">distancia do mes</p>
-              <p className="metric-number mt-2 text-3xl">{runKm.toFixed(1)} km</p>
-            </div>
-          </div>
-        </Surface>
+      <SectionHeading eyebrow="posts" title="Meu feed publico" />
+      <div className="space-y-5">
+        {socialReady
+          ? posts.map((post) => (
+              <SocialPostCard key={post.id} post={post} liked={false} canInteract={Boolean(activeProfile.verifiedEmail)} viewerProfile={activeProfile} />
+            ))
+          : localFeedPosts.map((post) => (
+              <Surface key={post.id} className="overflow-hidden rounded-[24px] p-0">
+                <img src={post.image} alt={post.caption} className="h-72 w-full object-cover" />
+                <div className="p-5">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">{post.activityLabel}</p>
+                  <h3 className="mt-2 text-2xl font-semibold tracking-[-0.05em]">{post.caption}</h3>
+                  <p className="mt-2 text-sm text-[var(--muted)]">
+                    {post.likes} curtidas · {new Date(post.createdAt).toLocaleDateString("pt-BR")}
+                  </p>
+                </div>
+              </Surface>
+            ))}
+        {(socialReady ? posts.length === 0 : localFeedPosts.length === 0) ? (
+          <Surface className="rounded-[22px] p-5 text-sm text-[var(--muted)]">
+            Voce ainda nao publicou nenhum treino, corrida, evolucao ou conquista no feed social.
+          </Surface>
+        ) : null}
       </div>
     </PageFrame>
   );

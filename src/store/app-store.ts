@@ -5,7 +5,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { commentsSeed, communityProfiles, demoUsers, exerciseLibrary, feedSeed, photoSeed, runSeed, swimSeed, workoutsSeed } from "@/lib/demo-data";
 import { isoNow } from "@/lib/utils";
-import type { SessionUser, SharedSnapshot, WorkoutExercise, WorkoutKind } from "@/types/app";
+import type { Exercise, FeedPost, SessionUser, SharedSnapshot, WorkoutExercise, WorkoutKind } from "@/types/app";
 
 type ConnectionHint = "online" | "offline" | "syncing" | "saved";
 
@@ -21,13 +21,36 @@ interface AppState extends SharedSnapshot {
   setConnectionHint: (value: ConnectionHint) => void;
   setSyncMode: (value: AppState["syncMode"]) => void;
   signInDemo: (userId?: string) => void;
-  signInFirebaseUser: (payload: { uid: string; email: string | null }) => void;
+  signInFirebaseUser: (payload: { uid: string; email: string | null; emailVerified?: boolean }) => void;
+  signInLocalUser: (payload: {
+    id: string;
+    email: string;
+    name: string;
+    avatar?: string;
+    avatarImage?: string;
+    username?: string;
+    bio?: string;
+    emailVerified?: boolean;
+    profileCompleted?: boolean;
+    city?: string;
+    country?: string;
+    fitnessGoal?: string;
+    trainingStyles?: string[];
+    age?: number;
+    birthDate?: string;
+    weightKg?: number;
+    heightCm?: number;
+    sex?: SessionUser["sex"];
+    visibility?: SessionUser["visibility"];
+  }) => void;
+  updateSessionUser: (patch: Partial<SessionUser>) => void;
   signOut: () => void;
   toggleLike: (postId: string) => void;
   addComment: (postId: string, text: string) => void;
   toggleWorkoutCompleted: (workoutId: string) => void;
   addWorkoutNote: (workoutId: string, note: string) => void;
   duplicateWorkout: (workoutId: string) => void;
+  deleteWorkoutRoutine: (workoutId: string) => void;
   duplicateLastWeek: () => void;
   addCustomWorkout: (payload: {
     title: string;
@@ -36,9 +59,18 @@ interface AppState extends SharedSnapshot {
     muscleGroups: string[];
     exercises?: WorkoutExercise[];
   }) => void;
+  saveWorkoutRoutine: (payload: {
+    id?: string;
+    title: string;
+    durationMinutes: number;
+    muscleGroups: string[];
+    exercises: WorkoutExercise[];
+  }) => string;
   reorderWorkoutExercises: (workoutId: string, ordered: string[]) => void;
   updateWorkoutExercise: (workoutId: string, exerciseId: string, patch: Partial<WorkoutExercise>) => void;
   addExercisesToWorkout: (workoutId: string, exerciseIds: string[]) => void;
+  upsertExercises: (payload: Exercise[]) => void;
+  addFeedPost: (payload: { caption: string; image: string; activityLabel?: string; metricLabel?: string; type?: FeedPost["type"] }) => void;
   favoriteExercise: (exerciseId: string) => void;
   toggleFollowProfile: (profileId: string) => void;
   toggleFriendProfile: (profileId: string) => void;
@@ -97,7 +129,7 @@ export const useAppStore = create<AppState>()(
               : fallback,
           };
         }),
-      signInFirebaseUser: ({ uid, email }) =>
+      signInFirebaseUser: ({ uid, email, emailVerified }) =>
         set({
           sessionUser: {
             id: uid,
@@ -106,8 +138,38 @@ export const useAppStore = create<AppState>()(
             avatar: (email?.slice(0, 2) ?? "FB").toUpperCase(),
             bio: "Conta conectada com sincronizacao em tempo real.",
             mode: "firebase",
+            emailVerified,
           },
         }),
+      signInLocalUser: (payload) =>
+        set({
+          sessionUser: {
+            id: payload.id,
+            email: payload.email,
+            name: payload.name,
+            avatar: payload.avatar ?? payload.name.slice(0, 2).toUpperCase(),
+            avatarImage: payload.avatarImage,
+            bio: payload.bio,
+            mode: "local",
+            username: payload.username,
+            emailVerified: payload.emailVerified ?? true,
+            profileCompleted: payload.profileCompleted ?? false,
+            city: payload.city,
+            country: payload.country,
+            fitnessGoal: payload.fitnessGoal,
+            trainingStyles: payload.trainingStyles,
+            age: payload.age,
+            birthDate: payload.birthDate,
+            weightKg: payload.weightKg,
+            heightCm: payload.heightCm,
+            sex: payload.sex,
+            visibility: payload.visibility,
+          },
+        }),
+      updateSessionUser: (patch) =>
+        set((state) => ({
+          sessionUser: state.sessionUser ? { ...state.sessionUser, ...patch } : null,
+        })),
       signOut: () => set({ sessionUser: null }),
       toggleLike: (postId) =>
         set((state) => ({
@@ -176,6 +238,12 @@ export const useAppStore = create<AppState>()(
             ],
           };
         }),
+      deleteWorkoutRoutine: (workoutId) =>
+        set((state) => ({
+          workouts: state.workouts.filter((workout) => workout.id !== workoutId),
+          quickWorkoutId: state.quickWorkoutId === workoutId ? state.workouts.find((workout) => workout.id !== workoutId)?.id ?? null : state.quickWorkoutId,
+          connectionHint: "saved",
+        })),
       duplicateLastWeek: () =>
         set((state) => ({
           workouts: [
@@ -227,6 +295,36 @@ export const useAppStore = create<AppState>()(
             connectionHint: "saved",
           };
         }),
+      saveWorkoutRoutine: ({ id, title, durationMinutes, muscleGroups, exercises }) => {
+        const routineId = id ?? crypto.randomUUID();
+
+        set((state) => {
+          const nextWorkout: AppState["workouts"][number] = {
+            id: routineId,
+            label: title.trim().slice(0, 3) || `R${state.workouts.length + 1}`,
+            date: isoNow(),
+            kind: "gym" as const,
+            title: title.trim(),
+            color: "#9CFF79",
+            completed: false,
+            durationMinutes,
+            tags: ["hipertrofia"],
+            muscleGroups,
+            quickNote: "Rotina personalizada criada na biblioteca de treinos.",
+            exercises,
+          };
+
+          return {
+            workouts: state.workouts.some((workout) => workout.id === routineId)
+              ? state.workouts.map((workout) => (workout.id === routineId ? { ...workout, ...nextWorkout } : workout))
+              : [nextWorkout, ...state.workouts],
+            quickWorkoutId: routineId,
+            connectionHint: "saved",
+          };
+        });
+
+        return routineId;
+      },
       reorderWorkoutExercises: (workoutId, ordered) =>
         set((state) => ({
           workouts: state.workouts.map((workout) => {
@@ -277,6 +375,63 @@ export const useAppStore = create<AppState>()(
           ),
           recentExerciseIds: [...exerciseIds, ...state.recentExerciseIds.filter((id) => !exerciseIds.includes(id))].slice(0, 10),
         })),
+      upsertExercises: (payload) =>
+        set((state) => {
+          const nextExercises = [...state.exercises];
+          const indexById = new Map(nextExercises.map((exercise, index) => [exercise.id, index]));
+
+          payload.forEach((exercise) => {
+            const existingIndex = indexById.get(exercise.id);
+
+            if (existingIndex === undefined) {
+              indexById.set(exercise.id, nextExercises.length);
+              nextExercises.push(exercise);
+              return;
+            }
+
+            nextExercises[existingIndex] = {
+              ...nextExercises[existingIndex],
+              ...exercise,
+            };
+          });
+
+          return {
+            exercises: nextExercises,
+            connectionHint: "saved",
+          };
+        }),
+      addFeedPost: ({ caption, image, activityLabel, metricLabel, type = "workout" }) =>
+        set((state) => {
+          const sessionUser = state.sessionUser;
+
+          if (!sessionUser) {
+            return state;
+          }
+
+          return {
+            feedPosts: [
+              {
+                id: crypto.randomUUID(),
+                authorId: sessionUser.id,
+                authorName: sessionUser.name,
+                avatar: sessionUser.avatar,
+                activityLabel: activityLabel ?? "Novo post no feed",
+                metricLabel,
+                type,
+                caption: caption.trim(),
+                image,
+                createdAt: isoNow(),
+                likes: 0,
+                likedByUserIds: [],
+                streakDays: 1,
+                consecutiveDays: 1,
+                statsLabel: metricLabel ?? "update",
+              },
+              ...state.feedPosts,
+            ],
+            connectionHint: "saved",
+          };
+        }),
       favoriteExercise: (exerciseId) =>
         set((state) => ({
           favoriteExerciseIds: state.favoriteExerciseIds.includes(exerciseId)

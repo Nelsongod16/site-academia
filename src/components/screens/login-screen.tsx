@@ -1,132 +1,96 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Cloud, Smartphone } from "lucide-react";
 import { useStore } from "zustand";
 
-import { Button, Input, StrongSurface, Surface } from "@/components/ui/kit";
-import { loginWithFirebase } from "@/lib/firebase/auth";
+import { Button, Input, StrongSurface } from "@/components/ui/kit";
+import { loginWithFirebase, loginWithLocalAccount } from "@/lib/firebase/auth";
 import { hasFirebaseConfig } from "@/lib/firebase/client";
 import { useAppStore } from "@/store/app-store";
 
 export function LoginScreen() {
   const router = useRouter();
-  const hasHydrated = useStore(useAppStore, (state) => state.hasHydrated);
-  const sessionUser = useStore(useAppStore, (state) => state.sessionUser);
-  const signInDemo = useStore(useAppStore, (state) => state.signInDemo);
-  const signInFirebaseUser = useStore(useAppStore, (state) => state.signInFirebaseUser);
-  const [email, setEmail] = useState("lia@pulse.app");
-  const [password, setPassword] = useState("123456");
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (hasHydrated && sessionUser) {
-      router.replace("/feed");
+  const [{ pendingEmail, checkEmail }] = useState(() => {
+    if (typeof window === "undefined") {
+      return { pendingEmail: "", checkEmail: false };
     }
-  }, [hasHydrated, router, sessionUser]);
 
-  function enterApp() {
-    router.push("/feed");
-  }
+    const searchParams = new URLSearchParams(window.location.search);
+    return {
+      pendingEmail: searchParams.get("email") ?? "",
+      checkEmail: searchParams.get("checkEmail") === "1",
+    };
+  });
+  const signInFirebaseUser = useStore(useAppStore, (state) => state.signInFirebaseUser);
+  const signInLocalUser = useStore(useAppStore, (state) => state.signInLocalUser);
+  const [email, setEmail] = useState(pendingEmail);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function handleFirebaseLogin() {
     try {
+      setLoading(true);
       setError("");
-      const result = await loginWithFirebase(email, password);
-      signInFirebaseUser({ uid: result.user.uid, email: result.user.email });
-      enterApp();
+      setSuccess("");
+
+      if (hasFirebaseConfig()) {
+        const result = await loginWithFirebase(email, password);
+        signInFirebaseUser({ uid: result.user.uid, email: result.user.email, emailVerified: result.user.emailVerified });
+      } else {
+        const sessionUser = await loginWithLocalAccount(email, password);
+        signInLocalUser(sessionUser);
+      }
+
+      setSuccess("Conta autenticada. Abrindo o app.");
+      router.replace("/feed");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Nao foi possivel entrar.");
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <main className="app-shell flex min-h-screen items-center justify-center px-4 py-8">
-      <div className="grid w-full max-w-5xl gap-4 md:grid-cols-[1.1fr_0.9fr]">
-        <StrongSurface className="flex min-h-[520px] flex-col justify-between rounded-[32px] p-6 md:p-8">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--muted)]">pulse studio</p>
-            <h1 className="mt-4 max-w-md text-4xl font-semibold tracking-[-0.08em] md:text-6xl">
-              rotina limpa, foco bruto.
-            </h1>
-            <p className="mt-4 max-w-md text-sm leading-6 text-[var(--muted)]">
-              Academia, corrida, natacao, feed, fotos e evolucao fisica em uma experiencia compacta de app premium.
-            </p>
-          </div>
+    <main
+      className="app-shell relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8"
+      style={{
+        backgroundImage:
+          "linear-gradient(180deg, rgba(4,6,9,0.62) 0%, rgba(4,6,9,0.82) 48%, rgba(4,6,9,0.94) 100%), url('https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1800&q=80')",
+        backgroundPosition: "center",
+        backgroundSize: "cover",
+      }}
+    >
+      <div className="absolute inset-0 backdrop-blur-[6px]" aria-hidden="true" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(156,255,121,0.12),transparent_26%),radial-gradient(circle_at_85%_8%,rgba(79,209,255,0.12),transparent_22%)]" aria-hidden="true" />
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <Surface className="rounded-[24px]">
-              <Smartphone className="size-4 text-[var(--accent)]" />
-              <p className="mt-3 text-sm font-medium">PWA nativo</p>
-              <p className="mt-1 text-xs text-[var(--muted)]">Instalacao, cache e uso rapido no celular.</p>
-            </Surface>
-            <Surface className="rounded-[24px]">
-              <Cloud className="size-4 text-[var(--sky)]" />
-              <p className="mt-3 text-sm font-medium">Sync em tempo real</p>
-              <p className="mt-1 text-xs text-[var(--muted)]">Pronto para 2 pessoas com Firebase.</p>
-            </Surface>
-            <Surface className="rounded-[24px]">
-              <ArrowRight className="size-4 text-[var(--warn)]" />
-              <p className="mt-3 text-sm font-medium">Treino rapido</p>
-              <p className="mt-1 text-xs text-[var(--muted)]">Abrir o treino do dia em um toque.</p>
-            </Surface>
-          </div>
-        </StrongSurface>
-
+      <div className="relative z-10 w-full max-w-md">
         <StrongSurface className="rounded-[32px] p-6 md:p-8">
           <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--muted)]">entrar</p>
+          <h1 className="mt-4 text-3xl font-semibold tracking-[-0.06em] text-white md:text-4xl">Comece sua jornada</h1>
+
           <div className="mt-6 space-y-3">
             <Input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" />
             <Input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Senha" type="password" />
+            {checkEmail ? (
+              <p className="text-sm text-[#9CFF79]">
+                Conta criada para {pendingEmail ?? "seu e-mail"}. Confirme o e-mail recebido antes de entrar.
+              </p>
+            ) : null}
+            {success ? <p className="text-sm text-[#9CFF79]">{success}</p> : null}
             {error ? <p className="text-sm text-[var(--warn)]">{error}</p> : null}
-            {hasFirebaseConfig() ? (
-              <Button onClick={() => void handleFirebaseLogin()} className="w-full">
-                Entrar com Firebase
-              </Button>
-            ) : (
-              <Button
-                onClick={() =>
-                  startTransition(() => {
-                    signInDemo("user-1");
-                    enterApp();
-                  })
-                }
-                className="w-full"
-              >
-                Entrar no modo demo
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              onClick={() =>
-                startTransition(() => {
-                  signInDemo("user-2");
-                  enterApp();
-                })
-              }
-              className="w-full"
-            >
-              Entrar como segunda pessoa
+            <Button onClick={() => void handleFirebaseLogin()} className="w-full" disabled={loading || !email.trim() || !password.trim()}>
+              {loading ? "Entrando..." : hasFirebaseConfig() ? "Entrar com conta online" : "Entrar com conta local"}
             </Button>
-          </div>
-
-          <div className="mt-5 rounded-[20px] border border-white/8 bg-white/4 p-4">
-            <p className="text-sm font-medium">Modo atual</p>
-            <p className="mt-1 text-xs leading-6 text-[var(--muted)]">
-              {hasFirebaseConfig()
-                ? "Autenticacao real e sincronizacao viva habilitadas."
-                : "Interface completa com autosave local e estrutura pronta para Firebase."}
-            </p>
-          </div>
-
-          <p className="mt-5 text-sm text-[var(--muted)]">
-            Novo por aqui?{" "}
-            <Link href="/register" className="text-white">
-              Criar conta
+            <Link href="/register" className="block">
+              <Button variant="secondary" className="w-full">
+                Criar conta
+              </Button>
             </Link>
-          </p>
+          </div>
         </StrongSurface>
       </div>
     </main>

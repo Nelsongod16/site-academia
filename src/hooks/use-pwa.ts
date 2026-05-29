@@ -9,6 +9,7 @@ interface InstallPromptEvent extends Event {
 
 export function usePwa() {
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [canInstall, setCanInstall] = useState(false);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -32,9 +33,11 @@ export function usePwa() {
     const handlePrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as InstallPromptEvent);
+      setCanInstall(true);
     };
 
     window.addEventListener("beforeinstallprompt", handlePrompt);
+
     return () => window.removeEventListener("beforeinstallprompt", handlePrompt);
   }, []);
 
@@ -46,11 +49,12 @@ export function usePwa() {
     await installPrompt.prompt();
     const choice = await installPrompt.userChoice;
     setInstallPrompt(null);
+    setCanInstall(false);
     return choice.outcome === "accepted";
   }
 
   return {
-    canInstall: false,
+    canInstall,
     install,
   };
 }

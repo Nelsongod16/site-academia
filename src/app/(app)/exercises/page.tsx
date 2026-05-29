@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import Exercises from "@/pages/Exercises";
 
 export default function ExercisesPage() {
-  redirect("/training");
+  return <Exercises />;
 }
