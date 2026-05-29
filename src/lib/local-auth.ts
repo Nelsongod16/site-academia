@@ -78,6 +78,15 @@ function buildDefaultProfile(email: string): LocalBrowserProfile {
 }
 
 function toSessionUser(account: LocalBrowserAccount): SessionUser {
+  const profileCompleted = Boolean(
+    account.profile.fullName &&
+      account.profile.username &&
+      account.profile.avatarUrl &&
+      account.profile.fitnessGoal &&
+      Number(account.profile.weightKg) > 0 &&
+      Number(account.profile.heightCm) > 0,
+  );
+
   return {
     id: account.id,
     email: account.email,
@@ -88,7 +97,7 @@ function toSessionUser(account: LocalBrowserAccount): SessionUser {
     mode: "local",
     username: formatUsername(account.profile.username),
     emailVerified: true,
-    profileCompleted: true,
+    profileCompleted,
     city: account.profile.city,
     country: account.profile.country,
     fitnessGoal: account.profile.fitnessGoal,

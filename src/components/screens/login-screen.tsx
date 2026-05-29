@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useStore } from "zustand";
 
 import { Button, Input, StrongSurface } from "@/components/ui/kit";
@@ -11,7 +10,6 @@ import { hasFirebaseConfig } from "@/lib/firebase/client";
 import { useAppStore } from "@/store/app-store";
 
 export function LoginScreen() {
-  const router = useRouter();
   const [{ pendingEmail, checkEmail }] = useState(() => {
     if (typeof window === "undefined") {
       return { pendingEmail: "", checkEmail: false };
@@ -37,16 +35,19 @@ export function LoginScreen() {
       setError("");
       setSuccess("");
 
+      let shouldCompleteProfile = false;
+
       if (hasFirebaseConfig()) {
         const result = await loginWithFirebase(email, password);
         signInFirebaseUser({ uid: result.user.uid, email: result.user.email, emailVerified: result.user.emailVerified });
       } else {
         const sessionUser = await loginWithLocalAccount(email, password);
         signInLocalUser(sessionUser);
+        shouldCompleteProfile = sessionUser.profileCompleted !== true;
       }
 
       setSuccess("Conta autenticada. Abrindo o app.");
-      router.replace("/feed");
+      window.location.replace(shouldCompleteProfile ? "/profile?completeProfile=1" : "/feed");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Nao foi possivel entrar.");
     } finally {

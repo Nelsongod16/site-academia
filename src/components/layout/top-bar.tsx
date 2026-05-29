@@ -78,7 +78,7 @@ export function TopBar() {
 
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{sessionUser?.name ?? "Perfil"}</p>
-            <p className="truncate text-xs text-[var(--muted)]">{sessionUser?.username ?? sessionUser?.email ?? ""}</p>
+            <p className="truncate text-xs text-[var(--muted)]">{sessionUser?.username ?? ""}</p>
           </div>
 
           <button onClick={() => setMenuOpen((current) => !current)} className="flex size-8 items-center justify-center rounded-full text-[var(--muted)] transition hover:bg-white/6 hover:text-white">

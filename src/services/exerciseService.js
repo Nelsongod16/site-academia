@@ -165,3 +165,18 @@ export async function fetchExercisesByBodyPart(bodyPart, options = {}) {
   const exercises = Array.isArray(response.data?.exercises) ? response.data.exercises : [];
   return exercises.map(normalizeExercise);
 }
+
+export async function fetchExerciseCatalog(options = {}) {
+  const response = await axios.get("/api/exercises", {
+    signal: options.signal,
+  });
+
+  const exercises = Array.isArray(response.data?.exercises) ? response.data.exercises : [];
+  const exerciseMap = new Map();
+
+  exercises.map(normalizeExercise).forEach((exercise) => {
+    exerciseMap.set(exercise.id, exercise);
+  });
+
+  return Array.from(exerciseMap.values()).sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+}

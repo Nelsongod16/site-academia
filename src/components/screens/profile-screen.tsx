@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { useStore } from "zustand";
 
 import { PageFrame } from "@/components/layout/page-frame";
+import { ProfileOnboardingModal } from "@/components/social/profile-onboarding-modal";
 import { SocialPostCard } from "@/components/social/social-post-card";
 import { Button, SectionHeading, StrongSurface, Surface } from "@/components/ui/kit";
 import { useCurrentSocialState, useProfilePosts } from "@/hooks/use-social-session";
@@ -50,6 +52,7 @@ function createLocalProfile(sessionUser: ReturnType<typeof useAppStore.getState>
 }
 
 export function ProfileScreen() {
+  const searchParams = useSearchParams();
   const socialReady = hasFirebaseConfig();
   const sessionUser = useStore(useAppStore, (state) => state.sessionUser);
   const feedPosts = useStore(useAppStore, (state) => state.feedPosts);
@@ -63,10 +66,24 @@ export function ProfileScreen() {
   const localMinutes = useMemo(() => totalMinutes(workouts), [workouts]);
   const recentPhotos = useMemo(() => photos.slice(0, 3), [photos]);
   const localFeedPosts = useMemo(() => feedPosts.filter((post) => post.authorId === sessionUser?.id), [feedPosts, sessionUser?.id]);
+  const fallbackProfile = useMemo(() => createLocalProfile(sessionUser), [sessionUser]);
+  const forceCompleteProfile = searchParams?.get("completeProfile") === "1";
+  const needsProfileCompletion = Boolean(
+    sessionUser &&
+      (sessionUser.profileCompleted !== true || (socialReady && profile ? !profile.profileCompleted : false)),
+  );
+  const onboardingProfile = (socialReady ? profile : null) ?? fallbackProfile;
 
   if (!activeProfile) {
     return (
       <PageFrame>
+        {sessionUser ? (
+          <ProfileOnboardingModal
+            open={forceCompleteProfile || needsProfileCompletion}
+            mandatory
+            profile={onboardingProfile}
+          />
+        ) : null}
         <StrongSurface className="rounded-[28px]">
           <h2 className="text-3xl font-semibold tracking-[-0.07em]">Complete seu perfil para liberar a area publica.</h2>
           <p className="mt-3 text-sm text-[var(--muted)]">Assim que o onboarding for concluido, suas estatisticas e seus posts vao aparecer aqui.</p>
@@ -77,6 +94,13 @@ export function ProfileScreen() {
 
   return (
     <PageFrame className="gap-5">
+      {sessionUser ? (
+        <ProfileOnboardingModal
+          open={forceCompleteProfile || needsProfileCompletion}
+          mandatory
+          profile={onboardingProfile}
+        />
+      ) : null}
       <StrongSurface className="overflow-hidden rounded-[30px] p-0">
         <div className="relative min-h-[380px]">
           {activeProfile.avatarUrl ? <img src={activeProfile.avatarUrl} alt={activeProfile.fullName} className="absolute inset-0 h-full w-full object-cover" /> : null}

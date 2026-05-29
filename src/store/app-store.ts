@@ -130,16 +130,33 @@ export const useAppStore = create<AppState>()(
           };
         }),
       signInFirebaseUser: ({ uid, email, emailVerified }) =>
-        set({
-          sessionUser: {
-            id: uid,
-            email: email ?? "firebase@pulse.app",
-            name: email?.split("@")[0] ?? "Firebase User",
-            avatar: (email?.slice(0, 2) ?? "FB").toUpperCase(),
-            bio: "Conta conectada com sincronizacao em tempo real.",
-            mode: "firebase",
-            emailVerified,
-          },
+        set((state) => {
+          const currentSession = state.sessionUser?.id === uid ? state.sessionUser : null;
+
+          return {
+            sessionUser: {
+              id: uid,
+              email: email ?? currentSession?.email ?? "firebase@pulse.app",
+              name: currentSession?.name ?? email?.split("@")[0] ?? "Firebase User",
+              avatar: currentSession?.avatar ?? (email?.slice(0, 2) ?? "FB").toUpperCase(),
+              avatarImage: currentSession?.avatarImage,
+              bio: currentSession?.bio ?? "Conta conectada com sincronizacao em tempo real.",
+              mode: "firebase",
+              username: currentSession?.username,
+              emailVerified,
+              profileCompleted: currentSession?.profileCompleted,
+              city: currentSession?.city,
+              country: currentSession?.country,
+              fitnessGoal: currentSession?.fitnessGoal,
+              trainingStyles: currentSession?.trainingStyles,
+              age: currentSession?.age,
+              birthDate: currentSession?.birthDate,
+              weightKg: currentSession?.weightKg,
+              heightCm: currentSession?.heightCm,
+              sex: currentSession?.sex,
+              visibility: currentSession?.visibility,
+            },
+          };
         }),
       signInLocalUser: (payload) =>
         set({

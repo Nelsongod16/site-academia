@@ -33,23 +33,25 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const bodyPart = searchParams.get("bodyPart")?.trim().toLowerCase();
 
-  if (!bodyPart || !VALID_BODY_PARTS.includes(bodyPart as (typeof VALID_BODY_PARTS)[number])) {
+  if (bodyPart && !VALID_BODY_PARTS.includes(bodyPart as (typeof VALID_BODY_PARTS)[number])) {
     return NextResponse.json({ message: "Grupo muscular invalido para consulta." }, { status: 400 });
   }
 
   try {
-    const mappedMuscles = BODY_PART_MUSCLE_MAP[bodyPart as (typeof VALID_BODY_PARTS)[number]];
-    const exercises = exerciseDataset.filter((exercise) => {
-      const primaryMuscles = Array.isArray(exercise.primaryMuscles) ? exercise.primaryMuscles.map((muscle) => String(muscle).toLowerCase()) : [];
-      const secondaryMuscles = Array.isArray(exercise.secondaryMuscles) ? exercise.secondaryMuscles.map((muscle) => String(muscle).toLowerCase()) : [];
-      const allMuscles = [...primaryMuscles, ...secondaryMuscles];
+    const exercises = bodyPart
+      ? exerciseDataset.filter((exercise) => {
+          const mappedMuscles = BODY_PART_MUSCLE_MAP[bodyPart as (typeof VALID_BODY_PARTS)[number]];
+          const primaryMuscles = Array.isArray(exercise.primaryMuscles) ? exercise.primaryMuscles.map((muscle) => String(muscle).toLowerCase()) : [];
+          const secondaryMuscles = Array.isArray(exercise.secondaryMuscles) ? exercise.secondaryMuscles.map((muscle) => String(muscle).toLowerCase()) : [];
+          const allMuscles = [...primaryMuscles, ...secondaryMuscles];
 
-      return mappedMuscles.some((muscle) => allMuscles.includes(muscle));
-    });
+          return mappedMuscles.some((muscle) => allMuscles.includes(muscle));
+        })
+      : exerciseDataset;
 
     return NextResponse.json(
       {
-        bodyPart,
+        bodyPart: bodyPart ?? "all",
         exercises,
       },
       {

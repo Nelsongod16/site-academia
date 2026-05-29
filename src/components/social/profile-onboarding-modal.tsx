@@ -15,7 +15,6 @@ import { useAppStore } from "@/store/app-store";
 import type { SocialProfile, SocialProfileInput, SocialSex, SocialVisibility } from "@/types/social";
 
 const trainingStyleOptions = ["musculacao", "corrida", "natacao", "mobilidade", "cross training", "yoga"];
-const goalOptions = ["ganho de massa", "perda de gordura", "performance", "saude", "consistencia", "longevidade"];
 const visibilityOptions: { label: string; value: SocialVisibility }[] = [
   { label: "perfil publico", value: "public" },
   { label: "so amigos", value: "friends" },
@@ -41,7 +40,7 @@ function createInitialState(profile: SocialProfile | null): FormState {
     bio: profile?.bio ?? "",
     city: profile?.city ?? "",
     country: profile?.country ?? "",
-    fitnessGoal: profile?.fitnessGoal ?? goalOptions[0],
+    fitnessGoal: profile?.fitnessGoal ?? "",
     trainingStyles: profile?.trainingStyles ?? ["musculacao"],
     age: profile?.age ?? 25,
     birthDate: profile?.birthDate ?? "",
@@ -50,6 +49,37 @@ function createInitialState(profile: SocialProfile | null): FormState {
     sex: profile?.sex ?? "nao-informar",
     visibility: profile?.visibility ?? "public",
   };
+}
+
+function createMandatoryState(): FormState {
+  return {
+    fullName: "",
+    username: "",
+    avatarUrl: "",
+    avatarFile: null,
+    bio: "",
+    city: "",
+    country: "",
+    fitnessGoal: "",
+    trainingStyles: ["musculacao"],
+    age: 25,
+    birthDate: "",
+    weightKg: 0,
+    heightCm: 0,
+    sex: "nao-informar",
+    visibility: "public",
+  };
+}
+
+function hasMandatoryProfileFields(form: FormState) {
+  return Boolean(
+    form.fullName.trim() &&
+      form.username.trim() &&
+      form.fitnessGoal.trim() &&
+      Number(form.weightKg) > 0 &&
+      Number(form.heightCm) > 0 &&
+      (form.avatarUrl || form.avatarFile),
+  );
 }
 
 export function ProfileOnboardingModal({
@@ -69,6 +99,15 @@ export function ProfileOnboardingModal({
   const [form, setForm] = useState<FormState>(() => createInitialState(profile));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setForm(mandatory ? createMandatoryState() : createInitialState(profile));
+    setError("");
+  }, [mandatory, open, profile]);
 
   const previewAvatar = useMemo(() => {
     if (form.avatarFile) {
@@ -91,20 +130,29 @@ export function ProfileOnboardingModal({
     return null;
   }
 
+  const mandatoryInputClassName = mandatory
+    ? "bg-white text-black placeholder:text-[#8b95a7]"
+    : undefined;
+
   async function handleSave() {
     if (!sessionUser) {
       setError("Voce precisa entrar para salvar o perfil.");
       return;
     }
 
-    if (
+    if (mandatory) {
+      if (!hasMandatoryProfileFields(form)) {
+        setError("Preencha nome, arroba, foto, peso, altura e objetivo para liberar o app.");
+        return;
+      }
+    } else if (
       !form.fullName.trim() ||
       !form.username.trim() ||
       !form.birthDate ||
       !form.city.trim() ||
       !form.country.trim() ||
       !form.fitnessGoal.trim() ||
-      !form.avatarUrl && !form.avatarFile
+      (!form.avatarUrl && !form.avatarFile)
     ) {
       setError("Preencha todos os campos principais para liberar o app.");
       return;
@@ -189,12 +237,7 @@ export function ProfileOnboardingModal({
                 <p className="text-[11px] uppercase tracking-[0.28em] text-[var(--muted)]">
                   {mandatory ? "perfil obrigatorio" : "editar perfil"}
                 </p>
-                <h2 className="mt-2 text-3xl font-semibold tracking-[-0.07em]">
-                  Complete seu perfil social premium.
-                </h2>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-                  Esse card libera a camada social com perfis reais, amizades, feed ao vivo e descoberta por objetivo, cidade e estilo de treino.
-                </p>
+                <h2 className="mt-2 text-3xl font-semibold tracking-[-0.07em]">Complete seu perfil.</h2>
               </div>
               {mandatory ? (
                 <div className="hidden items-center gap-2 rounded-full bg-white/6 px-3 py-2 text-xs uppercase tracking-[0.2em] text-[var(--muted)] md:flex">
@@ -255,100 +298,127 @@ export function ProfileOnboardingModal({
 
               <div className="space-y-5">
                 <div className="grid gap-3 md:grid-cols-2">
-                  <Input value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="Nome completo" />
-                  <Input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} placeholder="@username unico" />
                   <Input
-                    value={String(form.age)}
-                    onChange={(event) => setForm((current) => ({ ...current, age: Number(event.target.value) || 0 }))}
-                    placeholder="Idade"
-                    type="number"
+                    value={form.fullName}
+                    onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))}
+                    placeholder="Nome"
+                    className={mandatoryInputClassName}
                   />
-                  <Input value={form.birthDate} onChange={(event) => setForm((current) => ({ ...current, birthDate: event.target.value }))} type="date" />
                   <Input
-                    value={String(form.weightKg)}
+                    value={form.username}
+                    onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))}
+                    placeholder="Arroba"
+                    className={mandatoryInputClassName}
+                  />
+                  <Input
+                    value={form.weightKg ? String(form.weightKg) : ""}
                     onChange={(event) => setForm((current) => ({ ...current, weightKg: Number(event.target.value) || 0 }))}
-                    placeholder="Peso (kg)"
+                    placeholder="Peso em kg"
                     type="number"
                     step="0.1"
+                    className={mandatoryInputClassName}
                   />
                   <Input
-                    value={String(form.heightCm)}
+                    value={form.heightCm ? String(form.heightCm) : ""}
                     onChange={(event) => setForm((current) => ({ ...current, heightCm: Number(event.target.value) || 0 }))}
-                    placeholder="Altura (cm)"
+                    placeholder="Altura em cm"
                     type="number"
+                    className={mandatoryInputClassName}
                   />
-                  <Input value={form.city} onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))} placeholder="Cidade" />
-                  <Input value={form.country} onChange={(event) => setForm((current) => ({ ...current, country: event.target.value }))} placeholder="Pais" />
+                  {mandatory ? null : (
+                    <>
+                      <Input
+                        value={String(form.age)}
+                        onChange={(event) => setForm((current) => ({ ...current, age: Number(event.target.value) || 0 }))}
+                        placeholder="Idade"
+                        type="number"
+                        className={mandatoryInputClassName}
+                      />
+                      <Input
+                        value={form.birthDate}
+                        onChange={(event) => setForm((current) => ({ ...current, birthDate: event.target.value }))}
+                        type="date"
+                        className={mandatoryInputClassName}
+                      />
+                      <Input
+                        value={form.city}
+                        onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))}
+                        placeholder="Cidade"
+                        className={mandatoryInputClassName}
+                      />
+                      <Input
+                        value={form.country}
+                        onChange={(event) => setForm((current) => ({ ...current, country: event.target.value }))}
+                        placeholder="Pais"
+                        className={mandatoryInputClassName}
+                      />
+                    </>
+                  )}
                 </div>
 
-                <div className="space-y-3">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">sexo</p>
-                  <div className="flex flex-wrap gap-2">
-                    {sexOptions.map((option) => (
-                      <Chip
-                        key={option.value}
-                        active={form.sex === option.value}
-                        onClick={() => setForm((current) => ({ ...current, sex: option.value }))}
-                      >
-                        {option.label}
-                      </Chip>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">objetivo fitness</p>
-                  <div className="flex flex-wrap gap-2">
-                    {goalOptions.map((option) => (
-                      <Chip
-                        key={option}
-                        active={form.fitnessGoal === option}
-                        onClick={() => setForm((current) => ({ ...current, fitnessGoal: option }))}
-                      >
-                        {option}
-                      </Chip>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">estilo de treino</p>
-                  <div className="flex flex-wrap gap-2">
-                    {trainingStyleOptions.map((option) => {
-                      const active = form.trainingStyles.includes(option);
-
-                      return (
+                {mandatory ? null : (
+                  <div className="space-y-3">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">sexo</p>
+                    <div className="flex flex-wrap gap-2">
+                      {sexOptions.map((option) => (
                         <Chip
-                          key={option}
-                          active={active}
-                          onClick={() =>
-                            setForm((current) => ({
-                              ...current,
-                              trainingStyles: active
-                                ? current.trainingStyles.filter((item) => item !== option)
-                                : [...current.trainingStyles, option],
-                            }))
-                          }
+                          key={option.value}
+                          active={form.sex === option.value}
+                          onClick={() => setForm((current) => ({ ...current, sex: option.value }))}
                         >
-                          {option}
+                          {option.label}
                         </Chip>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <Textarea
-                  value={form.bio}
-                  onChange={(event) => setForm((current) => ({ ...current, bio: event.target.value }))}
-                  placeholder="Bio curta, objetivo e vibe do seu treino."
+                <Input
+                  value={form.fitnessGoal}
+                  onChange={(event) => setForm((current) => ({ ...current, fitnessGoal: event.target.value }))}
+                  placeholder="Objetivo"
+                  className={mandatoryInputClassName}
                 />
+
+                {mandatory ? null : (
+                  <>
+                    <div className="space-y-3">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--muted)]">estilo de treino</p>
+                      <div className="flex flex-wrap gap-2">
+                        {trainingStyleOptions.map((option) => {
+                          const active = form.trainingStyles.includes(option);
+
+                          return (
+                            <Chip
+                              key={option}
+                              active={active}
+                              onClick={() =>
+                                setForm((current) => ({
+                                  ...current,
+                                  trainingStyles: active
+                                    ? current.trainingStyles.filter((item) => item !== option)
+                                    : [...current.trainingStyles, option],
+                                }))
+                              }
+                            >
+                              {option}
+                            </Chip>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <Textarea
+                      value={form.bio}
+                      onChange={(event) => setForm((current) => ({ ...current, bio: event.target.value }))}
+                      placeholder="Bio curta, objetivo e vibe do seu treino."
+                    />
+                  </>
+                )}
 
                 {error ? <p className="text-sm text-[var(--warn)]">{error}</p> : null}
 
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <p className="text-xs leading-6 text-[var(--muted)]">
-                    Perfil salvo no banco, pronto para amizade real, busca por cidade/pais e feed com usuarios reais.
-                  </p>
+                <div className="flex justify-end">
                   <Button onClick={() => void handleSave()} disabled={saving} className="min-w-40">
                     {saving ? <LoaderCircle className="size-4 animate-spin" /> : mandatory ? "Liberar app" : "Salvar perfil"}
                   </Button>

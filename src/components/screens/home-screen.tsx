@@ -1,22 +1,20 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useStore } from "zustand";
 
 import { LoginScreen } from "@/components/screens/login-screen";
 import { useAppStore } from "@/store/app-store";
 
 export function HomeScreen() {
-  const router = useRouter();
   const hasHydrated = useStore(useAppStore, (state) => state.hasHydrated);
   const sessionUser = useStore(useAppStore, (state) => state.sessionUser);
 
   useEffect(() => {
     if (hasHydrated && sessionUser) {
-      router.replace("/feed");
+      window.location.replace("/feed");
     }
-  }, [hasHydrated, router, sessionUser]);
+  }, [hasHydrated, sessionUser]);
 
   if (!hasHydrated) {
     return null;

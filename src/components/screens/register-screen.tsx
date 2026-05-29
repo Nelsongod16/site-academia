@@ -44,8 +44,8 @@ export function RegisterScreen() {
         signInLocalUser(sessionUser);
       }
 
-      setSuccess("Conta criada com sucesso. Abrindo o app.");
-      router.replace("/feed");
+      setSuccess("Conta criada com sucesso. Abrindo seu perfil para completar os dados.");
+      window.location.replace("/profile?completeProfile=1");
     } catch (registerError) {
       setError(registerError instanceof Error ? registerError.message : "Nao foi possivel criar a conta.");
     } finally {
